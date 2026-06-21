@@ -449,6 +449,11 @@ class TestEntityPlatforms:
             "hot_water_burning_times",
             "yesterday_gas_consumption",
         ]
+        assert [
+            s["display_order"]
+            for s in d["entities"]["sensor"]
+            if s.get("entity_category") == "diagnostic"
+        ] == list(range(1, 12))
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
     def test_e32_control_entity_names_and_order(self, device_type):
@@ -462,13 +467,21 @@ class TestEntityPlatforms:
         assert d["entities"]["water_heater"][0]["name"] == "设定温度"
         switches = {s["key"]: s for s in d["entities"]["switch"]}
         assert switches["power"]["name"] == "电源"
+        assert switches["power"]["display_order"] == 1
+        assert d["entities"]["water_heater"][0]["display_order"] == 2
         assert switches["cycle_insulation"]["name"] == "一键循环(1h)"
+        assert switches["cycle_insulation"]["display_order"] == 3
         assert switches["hot_water_reservation_switch"]["name"] == "循环预约"
+        assert switches["hot_water_reservation_switch"]["display_order"] == 4
         assert d["entities"]["text"][0]["name"] == "循环预约设置"
+        assert d["entities"]["text"][0]["display_order"] == 5
         assert [s["key"] for s in d["entities"]["select"]] == [
             "cycle_mode",
             "operation_mode",
         ]
+        selects = {s["key"]: s for s in d["entities"]["select"]}
+        assert selects["cycle_mode"]["display_order"] == 6
+        assert selects["operation_mode"]["display_order"] == 7
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
     def test_e32_schedule_config_uses_single_mode(self, device_type):

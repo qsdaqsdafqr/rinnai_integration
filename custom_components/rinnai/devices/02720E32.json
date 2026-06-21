@@ -83,6 +83,7 @@
             {
                 "name": "设定温度",
                 "key": "main",
+                "display_order": 2,
                 "min_temp": 35,
                 "max_temp": 60,
                 "step": 1,
@@ -196,6 +197,7 @@
             {
                 "key": "burning_state",
                 "name": "燃烧状态",
+                "display_order": 1,
                 "entity_category": "diagnostic",
                 "state_attribute": "burning_state",
                 "value_map": {
@@ -210,6 +212,7 @@
             {
                 "key": "hot_water_useable",
                 "name": "热水供应中",
+                "display_order": 2,
                 "entity_category": "diagnostic",
                 "state_attribute": "hot_water_useable",
                 "value_map": {
@@ -220,6 +223,7 @@
             {
                 "key": "fault_code",
                 "name": "故障码",
+                "display_order": 3,
                 "entity_category": "diagnostic",
                 "state_attribute": "fault_code",
                 "fallback_state_attribute": "error_code",
@@ -234,6 +238,7 @@
             {
                 "key": "child_lock",
                 "name": "童锁",
+                "display_order": 4,
                 "entity_category": "diagnostic",
                 "state_attribute": "child_lock",
                 "value_map": {
@@ -244,6 +249,7 @@
             {
                 "key": "faucet_not_close",
                 "name": "水流状态",
+                "display_order": 5,
                 "entity_category": "diagnostic",
                 "state_attribute": "faucet_not_close",
                 "value_map": {
@@ -254,6 +260,7 @@
             {
                 "key": "today_gas_consumption",
                 "name": "今日燃气用量",
+                "display_order": 6,
                 "device_class": "gas",
                 "state_class": "total_increasing",
                 "unit_of_measurement": "m³",
@@ -263,6 +270,7 @@
             {
                 "key": "monthly_gas_consumption",
                 "name": "本月燃气用量",
+                "display_order": 7,
                 "device_class": "gas",
                 "state_class": "total",
                 "unit_of_measurement": "m³",
@@ -272,6 +280,7 @@
             {
                 "key": "yearly_gas_consumption",
                 "name": "本年燃气用量",
+                "display_order": 8,
                 "device_class": "gas",
                 "state_class": "total",
                 "unit_of_measurement": "m³",
@@ -281,6 +290,7 @@
             {
                 "key": "gas_usage",
                 "name": "总计燃气用量",
+                "display_order": 9,
                 "device_class": "gas",
                 "state_class": "total_increasing",
                 "unit_of_measurement": "m³",
@@ -291,6 +301,7 @@
             {
                 "key": "hot_water_burning_times",
                 "name": "总计点火次数",
+                "display_order": 10,
                 "state_class": "total_increasing",
                 "unit_of_measurement": "次",
                 "entity_category": "diagnostic",
@@ -300,6 +311,7 @@
             {
                 "key": "yesterday_gas_consumption",
                 "name": "昨日燃气用量",
+                "display_order": 11,
                 "device_class": "gas",
                 "state_class": "total",
                 "unit_of_measurement": "m³",
@@ -311,6 +323,7 @@
             {
                 "key": "power",
                 "name": "电源",
+                "display_order": 1,
                 "type": "command_switch",
                 "command_key": "power",
                 "command_on": "01",
@@ -330,6 +343,7 @@
             {
                 "key": "cycle_insulation",
                 "name": "一键循环(1h)",
+                "display_order": 3,
                 "type": "command_switch",
                 "command_key": "temporaryCycleInsulationSetting",
                 "command_on": "01",
@@ -340,6 +354,7 @@
             {
                 "key": "hot_water_reservation_switch",
                 "name": "循环预约",
+                "display_order": 4,
                 "type": "reservation_switch",
                 "state_attribute": "byte_str"
             }
@@ -348,6 +363,7 @@
             {
                 "key": "cycle_mode",
                 "name": "循环模式",
+                "display_order": 6,
                 "type": "command_select",
                 "command_key": "cycleModeSetting",
                 "state_attribute": "cycle_mode",
@@ -371,6 +387,7 @@
             {
                 "key": "operation_mode",
                 "name": "运行模式",
+                "display_order": 7,
                 "type": "command_select",
                 "command_key": "operationMode",
                 "state_attribute": "operation_mode",
@@ -404,6 +421,7 @@
             {
                 "key": "schedule_mode_1",
                 "name": "循环预约设置",
+                "display_order": 5,
                 "mode_index": 1,
                 "command_type": "schedule_data",
                 "state_attribute": "byte_str",

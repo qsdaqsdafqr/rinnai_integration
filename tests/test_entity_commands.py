@@ -288,6 +288,40 @@ def _e32_water_heater_config() -> dict[str, Any]:
     return config
 
 
+def test_display_order_adds_invisible_sort_prefix(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = {
+        "name": "Power",
+        "key": "power",
+        "display_order": 3,
+        "command_key": "power",
+        "command_on": "01",
+        "command_off": "00",
+    }
+    coordinator = StubCoordinator({}, {})
+
+    entity = entity_modules.switch.RinnaiCommandSwitch(coordinator, "dev1", config)
+
+    assert entity._attr_name[1:] == "Power"
+    assert ord(entity._attr_name[0]) == 0xE0004
+
+
+def test_display_order_is_opt_in(entity_modules: SimpleNamespace) -> None:
+    config = {
+        "name": "Power",
+        "key": "power",
+        "command_key": "power",
+        "command_on": "01",
+        "command_off": "00",
+    }
+    coordinator = StubCoordinator({}, {})
+
+    entity = entity_modules.switch.RinnaiCommandSwitch(coordinator, "dev1", config)
+
+    assert entity._attr_name == "Power"
+
+
 @pytest.mark.asyncio
 async def test_relative_temperature_increases_one_step(entity_modules: SimpleNamespace) -> None:
     config = _e32_water_heater_config()
