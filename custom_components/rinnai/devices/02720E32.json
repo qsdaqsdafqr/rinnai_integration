@@ -190,6 +190,7 @@
                 "state_attribute": "burning_state",
                 "value_map": {
                     "0": "Standby",
+                    "1": "Standby",
                     "30": "Standby",
                     "31": "Heating Water",
                     "32": "Burning",

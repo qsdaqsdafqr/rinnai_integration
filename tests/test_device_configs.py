@@ -437,10 +437,12 @@ class TestEntityPlatforms:
         assert cycle_insulation["on_value"] == 1
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
-    def test_e32_burning_state_maps_zero_to_standby(self, device_type):
+    def test_e32_burning_state_maps_standby_codes(self, device_type):
         d = load(device_type)
         sensors = {s["key"]: s for s in d["entities"]["sensor"]}
         assert sensors["burning_state"]["value_map"]["0"] == "Standby"
+        assert sensors["burning_state"]["value_map"]["1"] == "Standby"
+        assert sensors["burning_state"]["value_map"]["30"] == "Standby"
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
     def test_e32_cycle_mode_select_writes_hex_values(self, device_type):
