@@ -1,0 +1,405 @@
+"""Tests for config-driven entity command behavior."""
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from typing import Any
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+RINNAI_ROOT = ROOT / "custom_components" / "rinnai"
+
+
+def _install_homeassistant_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install enough Home Assistant modules to import entity classes."""
+    modules: dict[str, ModuleType] = {}
+    for name in (
+        "homeassistant",
+        "homeassistant.components",
+        "homeassistant.components.water_heater",
+        "homeassistant.components.select",
+        "homeassistant.components.sensor",
+        "homeassistant.config_entries",
+        "homeassistant.const",
+        "homeassistant.core",
+        "homeassistant.helpers",
+        "homeassistant.helpers.entity",
+        "homeassistant.helpers.entity_platform",
+        "homeassistant.helpers.entity_registry",
+        "homeassistant.helpers.restore_state",
+        "homeassistant.helpers.update_coordinator",
+    ):
+        modules[name] = ModuleType(name)
+        monkeypatch.setitem(sys.modules, name, modules[name])
+
+    class CoordinatorEntity:
+        def __init__(self, coordinator: Any) -> None:
+            self.coordinator = coordinator
+
+        @property
+        def available(self) -> bool:
+            return True
+
+        def async_write_ha_state(self) -> None:
+            self._write_count = getattr(self, "_write_count", 0) + 1
+
+    class Entity:
+        pass
+
+    class WaterHeaterEntity:
+        @property
+        def min_temp(self) -> int:
+            return self._attr_min_temp
+
+        @property
+        def max_temp(self) -> int:
+            return self._attr_max_temp
+
+        def async_write_ha_state(self) -> None:
+            self._write_count = getattr(self, "_write_count", 0) + 1
+
+    class SelectEntity:
+        @property
+        def options(self) -> list[str]:
+            return self._attr_options
+
+        def async_write_ha_state(self) -> None:
+            self._write_count = getattr(self, "_write_count", 0) + 1
+
+    class SensorEntity:
+        def async_write_ha_state(self) -> None:
+            self._write_count = getattr(self, "_write_count", 0) + 1
+
+    class SensorEntityDescription:
+        def __init__(self, **kwargs: Any) -> None:
+            self.__dict__.update(kwargs)
+
+    class SensorDeviceClass:
+        DURATION = "duration"
+        GAS = "gas"
+        TEMPERATURE = "temperature"
+
+    class SensorStateClass:
+        TOTAL_INCREASING = "total_increasing"
+
+    class RestoreEntity:
+        async def async_added_to_hass(self) -> None:
+            return None
+
+    class WaterHeaterEntityFeature:
+        TARGET_TEMPERATURE = 1
+
+    modules["homeassistant.helpers.update_coordinator"].CoordinatorEntity = CoordinatorEntity
+    modules["homeassistant.helpers.entity"].Entity = Entity
+    modules["homeassistant.components.water_heater"].WaterHeaterEntity = WaterHeaterEntity
+    modules["homeassistant.components.water_heater"].WaterHeaterEntityFeature = WaterHeaterEntityFeature
+    modules["homeassistant.components.select"].SelectEntity = SelectEntity
+    modules["homeassistant.components.sensor"].SensorEntity = SensorEntity
+    modules["homeassistant.components.sensor"].SensorEntityDescription = SensorEntityDescription
+    modules["homeassistant.components.sensor"].SensorDeviceClass = SensorDeviceClass
+    modules["homeassistant.components.sensor"].SensorStateClass = SensorStateClass
+    modules["homeassistant.config_entries"].ConfigEntry = object
+    modules["homeassistant.const"].ATTR_TEMPERATURE = "temperature"
+    modules["homeassistant.const"].EntityCategory = str
+    modules["homeassistant.const"].UnitOfTemperature = SimpleNamespace(CELSIUS="C")
+    modules["homeassistant.const"].UnitOfTime = SimpleNamespace(HOURS="h")
+    modules["homeassistant.core"].HomeAssistant = object
+    modules["homeassistant.core"].callback = lambda func: func
+    modules["homeassistant.helpers.entity_platform"].AddEntitiesCallback = object
+    modules["homeassistant.helpers.restore_state"].RestoreEntity = RestoreEntity
+    modules["homeassistant.helpers.entity_registry"].async_get = lambda hass: None
+    modules["homeassistant.helpers"].entity_registry = modules[
+        "homeassistant.helpers.entity_registry"
+    ]
+
+
+def _load_module(name: str, path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture()
+def entity_modules(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    _install_homeassistant_stubs(monkeypatch)
+
+    for name in list(sys.modules):
+        if name == "custom_components" or name.startswith("custom_components.rinnai"):
+            monkeypatch.delitem(sys.modules, name, raising=False)
+
+    custom_components = ModuleType("custom_components")
+    custom_components.__path__ = [str(ROOT / "custom_components")]
+    rinnai_pkg = ModuleType("custom_components.rinnai")
+    rinnai_pkg.__path__ = [str(RINNAI_ROOT)]
+    core_pkg = ModuleType("custom_components.rinnai.core")
+    core_pkg.__path__ = [str(RINNAI_ROOT / "core")]
+
+    monkeypatch.setitem(sys.modules, "custom_components", custom_components)
+    monkeypatch.setitem(sys.modules, "custom_components.rinnai", rinnai_pkg)
+    monkeypatch.setitem(sys.modules, "custom_components.rinnai.core", core_pkg)
+
+    coordinator_mod = ModuleType("custom_components.rinnai.coordinator")
+    coordinator_mod.RinnaiCoordinator = object
+    monkeypatch.setitem(sys.modules, "custom_components.rinnai.coordinator", coordinator_mod)
+
+    _load_module("custom_components.rinnai.const", RINNAI_ROOT / "const.py", monkeypatch)
+    _load_module(
+        "custom_components.rinnai.core.entity_utils",
+        RINNAI_ROOT / "core" / "entity_utils.py",
+        monkeypatch,
+    )
+    _load_module("custom_components.rinnai.core.util", RINNAI_ROOT / "core" / "util.py", monkeypatch)
+    _load_module(
+        "custom_components.rinnai.core.schedule_manager",
+        RINNAI_ROOT / "core" / "schedule_manager.py",
+        monkeypatch,
+    )
+    _load_module("custom_components.rinnai.entity", RINNAI_ROOT / "entity.py", monkeypatch)
+    water_heater = _load_module(
+        "custom_components.rinnai.water_heater",
+        RINNAI_ROOT / "water_heater.py",
+        monkeypatch,
+    )
+    select = _load_module(
+        "custom_components.rinnai.select",
+        RINNAI_ROOT / "select.py",
+        monkeypatch,
+    )
+    sensor = _load_module(
+        "custom_components.rinnai.sensor",
+        RINNAI_ROOT / "sensor.py",
+        monkeypatch,
+    )
+
+    return SimpleNamespace(water_heater=water_heater, select=select, sensor=sensor)
+
+
+class StubCoordinator:
+    def __init__(self, raw_data: dict[str, Any], state_mapping: dict[str, str]) -> None:
+        self.commands: list[dict[str, Any]] = []
+        self.refresh_count = 0
+        self.state = SimpleNamespace(raw_data=raw_data)
+        self.device = SimpleNamespace(
+            online=True,
+            device_name="Test Device",
+            device_type="02720E32",
+            config=SimpleNamespace(
+                state_mapping=state_mapping,
+                schedule_config={},
+                features={},
+                entities={},
+            ),
+        )
+
+    def get_device(self, device_id: str) -> Any:
+        return self.device
+
+    def get_device_state(self, device_id: str) -> Any:
+        return self.state
+
+    async def async_send_command(self, device_id: str, command: dict[str, Any]) -> bool:
+        self.commands.append(command)
+        return True
+
+    async def async_request_refresh(self) -> None:
+        self.refresh_count += 1
+        command = self.commands[-1] if self.commands else {}
+        if command.get("hotWaterTempOperate") == "01":
+            self.state.raw_data["hotWaterTempSetting"] += 1
+        elif command.get("hotWaterTempOperate") == "00":
+            self.state.raw_data["hotWaterTempSetting"] -= 1
+
+
+def _e32_config() -> dict[str, Any]:
+    with open(RINNAI_ROOT / "devices" / "02720E32.json", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def _e32_water_heater_config() -> dict[str, Any]:
+    return _e32_config()["entities"]["water_heater"][0]
+
+
+@pytest.mark.asyncio
+async def test_relative_temperature_increases_one_step(entity_modules: SimpleNamespace) -> None:
+    config = _e32_water_heater_config()
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 40, "operationMode": "E0"},
+        {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=41)
+
+    assert coordinator.commands == [{"hotWaterTempOperate": "01"}]
+    assert coordinator.refresh_count == 1
+    assert coordinator.state.raw_data["hotWaterTempSetting"] == 41
+
+
+@pytest.mark.asyncio
+async def test_relative_temperature_decreases_one_step(entity_modules: SimpleNamespace) -> None:
+    config = _e32_water_heater_config()
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 41, "operationMode": "E0"},
+        {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=40)
+
+    assert coordinator.commands == [{"hotWaterTempOperate": "00"}]
+    assert coordinator.refresh_count == 1
+    assert coordinator.state.raw_data["hotWaterTempSetting"] == 40
+
+
+@pytest.mark.asyncio
+async def test_relative_temperature_equal_sends_no_command(entity_modules: SimpleNamespace) -> None:
+    config = _e32_water_heater_config()
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 40, "operationMode": "E0"},
+        {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=40)
+
+    assert coordinator.commands == []
+    assert coordinator.refresh_count == 0
+
+
+@pytest.mark.asyncio
+async def test_relative_temperature_rejects_disallowed_mode_value(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = _e32_water_heater_config()
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 40, "operationMode": "C1"},
+        {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=45)
+
+    assert coordinator.commands == []
+    assert coordinator.refresh_count == 0
+
+
+@pytest.mark.asyncio
+async def test_direct_temperature_path_unchanged_for_hex4(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = {
+        "name": "Water Heater",
+        "key": "main",
+        "min_temp": 35,
+        "max_temp": 65,
+        "step": 1,
+        "command_topic": "hotWaterTempSetting",
+        "temp_format": "hex4",
+        "state_attribute": "hot_water_temp",
+        "operation_mode": "Hot Water",
+    }
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 40},
+        {"hot_water_temp": "hotWaterTempSetting"},
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=41)
+
+    assert coordinator.commands == [{"hotWaterTempSetting": "2900"}]
+    assert coordinator.refresh_count == 0
+
+
+@pytest.mark.asyncio
+async def test_option_commands_can_send_different_command_keys(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = {
+        "name": "Operation Mode",
+        "key": "operation_mode",
+        "command_key": "operationMode",
+        "options_map": {
+            "Regular": "E0",
+            "Kitchen": "C1",
+            "Shower": "90",
+        },
+        "option_commands": {
+            "Regular": {"regularMode": "01"},
+            "Kitchen": {"kitchenMode": "01"},
+            "Shower": {"showerMode": "01"},
+        },
+        "state_attribute": "operation_mode",
+    }
+    coordinator = StubCoordinator(
+        {"operationMode": "E0"},
+        {"operation_mode": "operationMode"},
+    )
+    entity = entity_modules.select.RinnaiCommandSelect(coordinator, "dev1", config)
+
+    await entity.async_select_option("Kitchen")
+
+    assert coordinator.commands == [{"kitchenMode": "01"}]
+
+
+@pytest.mark.asyncio
+async def test_options_map_default_behavior_unchanged(entity_modules: SimpleNamespace) -> None:
+    config = {
+        "name": "Operation Mode",
+        "key": "operation_mode",
+        "command_key": "operationMode",
+        "options_map": {
+            "Normal": "00",
+            "Eco": "01",
+        },
+        "state_attribute": "operation_mode",
+    }
+    coordinator = StubCoordinator(
+        {"operationMode": "01"},
+        {"operation_mode": "operationMode"},
+    )
+    entity = entity_modules.select.RinnaiCommandSelect(coordinator, "dev1", config)
+
+    assert entity._attr_current_option == "Eco"
+
+    await entity.async_select_option("Normal")
+
+    assert coordinator.commands == [{"operationMode": "00"}]
+
+
+def test_value_aliases_display_current_option(entity_modules: SimpleNamespace) -> None:
+    config = _e32_config()["entities"]["select"][0]
+    coordinator = StubCoordinator(
+        {"operationMode": "81"},
+        {"operation_mode": "operationMode"},
+    )
+    entity = entity_modules.select.RinnaiCommandSelect(coordinator, "dev1", config)
+
+    assert entity._attr_current_option == "Kitchen"
+
+
+def test_sensor_fallback_uses_error_code_when_fault_code_is_empty(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = next(
+        item for item in _e32_config()["entities"]["sensor"] if item["key"] == "fault_code"
+    )
+    coordinator = StubCoordinator(
+        {"faultCode": "00", "errorCode": "12"},
+        {"fault_code": "faultCode", "error_code": "errorCode"},
+    )
+    entity = entity_modules.sensor.RinnaiGenericSensor(
+        coordinator,
+        "dev1",
+        config,
+    )
+
+    entity._update_attributes()
+
+    assert entity._attr_native_value == "12"

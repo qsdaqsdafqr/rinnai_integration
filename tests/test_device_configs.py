@@ -40,6 +40,7 @@ ALL_DEVICE_TYPES = [
 BOILER_TYPES   = ["0F06000C", "0F060016", "0F060G55"]
 E_SERIES_TYPES = ["02720E86", "0272000E", "02720022", "02720010", "0272001C",
                    "02720E76", "02720E66", "0272000D"]
+E32_TYPES      = ["02720E32"]
 E_MASSAGE      = ["02720E86", "0272000E", "02720022", "02720010", "0272001C"]
 E_CYCLE        = ["02720E86", "0272000E", "02720022"]
 E_THICK_THIN   = ["02720010", "0272001C"]
@@ -162,6 +163,18 @@ class TestStateMappingConsistency:
         assert d["state_mapping"].get("gas_usage") == "gasConsumption", \
             f"{device_type}: state_mapping gas_usage should point to 'gasConsumption'"
 
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_energy_keys_match_processors(self, device_type):
+        """E32 uses gas consumption plus hot-water ignition count energy keys."""
+        d = load(device_type)
+        energy_keys = d["features"]["energy_data_keys"]
+        assert "gasConsumption" in energy_keys
+        assert "hotWaterBurningTimes" in energy_keys
+        assert "gasConsumption" in d["processors"]
+        assert "hotWaterBurningTimes" in d["processors"]
+        assert d["state_mapping"].get("gas_usage") == "gasConsumption"
+        assert d["state_mapping"].get("hot_water_burning_times") == "hotWaterBurningTimes"
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # 3. Processor chain correctness
@@ -232,6 +245,27 @@ class TestProcessorChains:
         chain = d["processors"]["gasConsumption"]
         assert process_value("00004E20", chain) == pytest.approx(2.0)
 
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_hot_water_temp_hex2(self, device_type):
+        """E32 hotWaterTempSetting uses hex_to_int: "28" -> 40C."""
+        d = load(device_type)
+        chain = d["processors"]["hotWaterTempSetting"]
+        assert process_value("28", chain) == 40
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_gas_consumption_to_m3(self, device_type):
+        """E32 gasConsumption uses the same divide-by-10000 chain as E-series."""
+        d = load(device_type)
+        chain = d["processors"]["gasConsumption"]
+        assert process_value("00004E20", chain) == pytest.approx(2.0)
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_hot_water_burning_times(self, device_type):
+        """E32 hotWaterBurningTimes is a hex counter."""
+        d = load(device_type)
+        chain = d["processors"]["hotWaterBurningTimes"]
+        assert process_value("000036BC", chain) == 14012
+
     # ── RTC-626 温控器 ────────────────────────────────────────────────────────
 
     def test_rtc626_room_temp_setting(self):
@@ -281,6 +315,13 @@ class TestTemperatureEncoding:
         wh = d["entities"]["water_heater"][0]
         assert wh.get("temp_format") == "hex4", \
             f"{device_type}: water_heater should declare temp_format=hex4"
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_water_heater_does_not_use_hex4(self, device_type):
+        d = load(device_type)
+        wh = d["entities"]["water_heater"][0]
+        assert wh.get("temp_format", "hex2") != "hex4"
+        assert "relative_temperature_control" in wh
 
     def test_hex2_encoding_40c(self):
         """40°C → hex2 → "28" (2-char)"""
@@ -332,6 +373,88 @@ class TestEntityPlatforms:
         d = load(device_type)
         assert "climate" not in d["entities"], \
             f"{device_type}: E-series should NOT have climate platform"
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_has_expected_platforms(self, device_type):
+        d = load(device_type)
+        entities = d["entities"]
+        for platform in ("water_heater", "sensor", "switch", "select", "text"):
+            assert platform in entities, f"{device_type}: missing platform '{platform}'"
+        assert "climate" not in entities
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_has_required_entities(self, device_type):
+        d = load(device_type)
+        switches = {s["key"]: s for s in d["entities"].get("switch", [])}
+        selects = {s["key"]: s for s in d["entities"].get("select", [])}
+        sensors = {s["key"]: s for s in d["entities"].get("sensor", [])}
+
+        assert "power" in switches
+        assert "cycle_insulation" in switches
+        assert "hot_water_reservation_switch" in switches
+        assert "operation_mode" in selects
+        assert "cycle_mode" in selects
+        for key in (
+            "hot_water_temp",
+            "operation_mode",
+            "burning_state",
+            "gas_usage",
+            "hot_water_burning_times",
+            "fault_code",
+            "error_code",
+            "child_lock",
+            "faucet_not_close",
+            "hot_water_useable",
+            "hot_water_reservation",
+        ):
+            assert key in sensors
+        assert sensors["fault_code"]["fallback_state_attribute"] == "error_code"
+        assert "00" in sensors["fault_code"]["fallback_when"]
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_schedule_config_uses_single_mode(self, device_type):
+        d = load(device_type)
+        assert d["schedule_config"]["total_length"] == 34
+        assert d["schedule_config"]["status_byte_index"] == 0
+        assert d["schedule_config"]["data_start_byte_index"] == 2
+        assert d["schedule_config"]["bytes_per_mode"] == 3
+        assert d["schedule_config"]["mode_count"] == 1
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_switch_command_values(self, device_type):
+        d = load(device_type)
+        switches = {s["key"]: s for s in d["entities"]["switch"]}
+
+        power = switches["power"]
+        assert power["command_key"] == "power"
+        assert power["command_on"] == "01"
+        assert power["command_off"] == "00"
+
+        cycle_insulation = switches["cycle_insulation"]
+        assert cycle_insulation["command_key"] == "temporaryCycleInsulationSetting"
+        assert cycle_insulation["command_on"] == "01"
+        assert cycle_insulation["command_off"] == "00"
+        assert cycle_insulation["on_value"] == 1
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_burning_state_maps_zero_to_standby(self, device_type):
+        d = load(device_type)
+        sensors = {s["key"]: s for s in d["entities"]["sensor"]}
+        assert sensors["burning_state"]["value_map"]["0"] == "Standby"
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_cycle_mode_select_writes_hex_values(self, device_type):
+        d = load(device_type)
+        selects = {s["key"]: s for s in d["entities"]["select"]}
+        cycle_mode = selects["cycle_mode"]
+        assert cycle_mode["options_map"] == {
+            "Standard": 0,
+            "Energy Saving": 1,
+            "Comfort": 2,
+        }
+        assert cycle_mode["option_commands"]["Standard"] == {"cycleModeSetting": "00"}
+        assert cycle_mode["option_commands"]["Energy Saving"] == {"cycleModeSetting": "01"}
+        assert cycle_mode["option_commands"]["Comfort"] == {"cycleModeSetting": "02"}
 
     @pytest.mark.parametrize("device_type", E_MASSAGE)
     def test_e_massage_has_massage_switch(self, device_type):
@@ -540,6 +663,33 @@ class TestEndToEndStatePipeline:
         assert result["hotWaterTempSetting"] == 42
         assert result["gasConsumption"] == pytest.approx(2.0)
 
+    def test_e32_full_payload(self):
+        """E32: hex2 temp, cycle fields, diagnostics, and energy fields."""
+        d = load("02720E32")
+        raw = {
+            "hotWaterTempSetting": "28",
+            "cycleModeSetting": "02",
+            "temporaryCycleInsulationSetting": "01",
+            "childLock": "01",
+            "faucetNotCloseSign": "00",
+            "hotWaterUseableSign": "01",
+            "gasConsumption": "00004E20",
+            "hotWaterBurningTimes": "000036BC",
+            "operationMode": "E0",
+            "burningState": "0",
+        }
+        result = process_data(raw, d["processors"])
+        assert result["hotWaterTempSetting"] == 40
+        assert result["cycleModeSetting"] == 2
+        assert result["temporaryCycleInsulationSetting"] == 1
+        assert result["childLock"] == 1
+        assert result["faucetNotCloseSign"] == 0
+        assert result["hotWaterUseableSign"] == 1
+        assert result["gasConsumption"] == pytest.approx(2.0)
+        assert result["hotWaterBurningTimes"] == 14012
+        assert result["operationMode"] == "E0"
+        assert result["burningState"] == "0"
+
     def test_rtc626_payload(self):
         """RTC-626: room temperature and setpoint processing."""
         d = load("0F090004")
@@ -583,6 +733,7 @@ class TestWaterHeaterTempRanges:
         "02720E76": (35, 65),  # E76
         "02720E66": (35, 65),  # E66
         "0272000D": (35, 60),  # E51 basic
+        "02720E32": (35, 60),  # E32 relative temperature control
     }
 
     @pytest.mark.parametrize("device_type,expected", EXPECTED_RANGES.items())

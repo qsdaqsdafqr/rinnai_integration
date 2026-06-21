@@ -133,9 +133,15 @@ class RinnaiCommandSelect(RinnaiEntity, SelectEntity):
 
     def __init__(self, coordinator: RinnaiCoordinator, device_id: str, config: dict[str, Any]) -> None:
         super().__init__(coordinator, device_id, config)
-        self._command_key: str = config["command_key"]
-        self._options_map: dict[str, str] = config["options_map"]
-        self._value_to_label: dict[str, str] = {v: k for k, v in self._options_map.items()}
+        self._command_key: str | None = config.get("command_key")
+        self._options_map: dict[str, Any] = config["options_map"]
+        self._option_commands: dict[str, dict[str, Any]] = config.get("option_commands", {})
+        self._value_to_label: dict[str, str] = {
+            str(v): k for k, v in self._options_map.items()
+        }
+        for label, aliases in config.get("value_aliases", {}).items():
+            for alias in aliases:
+                self._value_to_label[str(alias)] = label
         self._state_attribute: str | None = config.get("state_attribute")
         self._attr_options = list(self._options_map.keys())
         self._update_attributes()
@@ -152,11 +158,24 @@ class RinnaiCommandSelect(RinnaiEntity, SelectEntity):
         self._attr_current_option = self._value_to_label.get(str(raw_val) if raw_val is not None else "")
 
     async def async_select_option(self, option: str) -> None:
-        value = self._options_map.get(option)
-        if value is None:
+        command = self._command_for_option(option)
+        if command is None:
             return
         if await self.coordinator.async_send_command(
-            self._device_id, {self._command_key: value}
+            self._device_id, command
         ):
             self._attr_current_option = option
             self.async_write_ha_state()
+
+    def _command_for_option(self, option: str) -> dict[str, Any] | None:
+        """Return the configured command for an option."""
+        if option in self._option_commands:
+            command = self._option_commands[option]
+            if "command_key" in command and "value" in command:
+                return {command["command_key"]: command["value"]}
+            return dict(command)
+
+        value = self._options_map.get(option)
+        if value is None or not self._command_key:
+            return None
+        return {self._command_key: value}

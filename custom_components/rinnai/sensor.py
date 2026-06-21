@@ -100,6 +100,11 @@ class RinnaiGenericSensor(RinnaiEntity, SensorEntity, RestoreEntity):
         self.entity_description = description
         self._value_map = config.get("value_map")
         self._state_attribute = config.get("state_attribute")
+        self._fallback_state_attribute = config.get("fallback_state_attribute")
+        self._fallback_when = {
+            str(value)
+            for value in config.get("fallback_when", ["", "0", "00", "Error", "error"])
+        }
         self._restored_native_value = None
 
     async def async_added_to_hass(self) -> None:
@@ -130,6 +135,13 @@ class RinnaiGenericSensor(RinnaiEntity, SensorEntity, RestoreEntity):
             return
 
         raw_value = self.get_state_value(self._state_attribute)
+        if (
+            self._fallback_state_attribute
+            and str(raw_value) in self._fallback_when
+        ):
+            fallback_value = self.get_state_value(self._fallback_state_attribute)
+            if fallback_value is not None and str(fallback_value) not in self._fallback_when:
+                raw_value = fallback_value
         
         if self._value_map and str(raw_value) in self._value_map:
             current_value = self._value_map[str(raw_value)]
