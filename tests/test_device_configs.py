@@ -532,9 +532,7 @@ class TestEntityPlatforms:
             "节能": "01",
             "舒适": "02",
         }
-        assert cycle_mode["option_commands"]["标准"] == {"cycleModeSetting": "00"}
-        assert cycle_mode["option_commands"]["节能"] == {"cycleModeSetting": "01"}
-        assert cycle_mode["option_commands"]["舒适"] == {"cycleModeSetting": "02"}
+        assert "option_commands" not in cycle_mode
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
     def test_e32_reservation_entities_have_notes(self, device_type):

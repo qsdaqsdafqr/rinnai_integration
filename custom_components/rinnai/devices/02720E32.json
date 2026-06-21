@@ -343,17 +343,6 @@
                     "标准": "00",
                     "节能": "01",
                     "舒适": "02"
-                },
-                "option_commands": {
-                    "标准": {
-                        "cycleModeSetting": "00"
-                    },
-                    "节能": {
-                        "cycleModeSetting": "01"
-                    },
-                    "舒适": {
-                        "cycleModeSetting": "02"
-                    }
                 }
             },
             {

@@ -133,7 +133,7 @@ class RinnaiCommandSelect(RinnaiEntity, SelectEntity):
 
     def __init__(self, coordinator: RinnaiCoordinator, device_id: str, config: dict[str, Any]) -> None:
         super().__init__(coordinator, device_id, config)
-        self._command_key: str | None = config.get("command_key")
+        self._command_key: str = config["command_key"]
         self._options_map: dict[str, str] = config["options_map"]
         self._option_commands: dict[str, dict[str, Any]] = config.get("option_commands", {})
         self._value_to_label = self._build_value_to_label_map(config)
@@ -177,12 +177,9 @@ class RinnaiCommandSelect(RinnaiEntity, SelectEntity):
     def _command_for_option(self, option: str) -> dict[str, Any] | None:
         """Return the configured command for an option."""
         if option in self._option_commands:
-            command = self._option_commands[option]
-            if "command_key" in command and "value" in command:
-                return {command["command_key"]: command["value"]}
-            return dict(command)
+            return dict(self._option_commands[option])
 
         value = self._options_map.get(option)
-        if value is None or not self._command_key:
+        if value is None:
             return None
         return {self._command_key: value}
