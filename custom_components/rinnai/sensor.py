@@ -139,6 +139,8 @@ class RinnaiGenericSensor(RinnaiEntity, SensorEntity, RestoreEntity):
             self._fallback_state_attribute
             and str(raw_value) in self._fallback_when
         ):
+            # Some devices expose an empty primary fault code and place the
+            # actionable code in a secondary field declared by configuration.
             fallback_value = self.get_state_value(self._fallback_state_attribute)
             if fallback_value is not None and str(fallback_value) not in self._fallback_when:
                 raw_value = fallback_value

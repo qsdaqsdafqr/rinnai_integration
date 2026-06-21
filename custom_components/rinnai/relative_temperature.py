@@ -122,6 +122,8 @@ async def async_set_relative_temperature(
 
     max_steps = abs(target_temperature - current)
     if allowed_temps and current in allowed_temps and target_temperature in allowed_temps:
+        # Some devices expose sparse temperature ladders; count configured
+        # ladder positions instead of assuming every degree is selectable.
         max_steps = abs(
             allowed_temps.index(target_temperature) - allowed_temps.index(current)
         )

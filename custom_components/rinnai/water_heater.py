@@ -66,6 +66,8 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         self._state_attribute = config["state_attribute"]
         self._relative_temperature_control = config.get("relative_temperature_control")
         self._command_topic = config.get("command_topic")
+        # Standard devices still require command_topic. Relative control is an
+        # explicit opt-in for devices that can only step temperature up/down.
         if not self._relative_temperature_control and not self._command_topic:
             raise KeyError("command_topic")
         # "hex2" → 2-char (G56 style: 40°C → "28")
