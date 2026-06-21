@@ -417,6 +417,7 @@ class TestEntityPlatforms:
             assert key in sensors
         assert "operation_mode" not in sensors
         assert "error_code" not in sensors
+        assert d["removed_entities"]["sensor"] == ["operation_mode", "error_code"]
         assert sensors["fault_code"]["fallback_state_attribute"] == "error_code"
         assert "00" in sensors["fault_code"]["fallback_when"]
         assert sensors["hot_water_useable"]["name"] == "热水供应中"

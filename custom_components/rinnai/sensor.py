@@ -35,10 +35,16 @@ async def async_setup_entry(
     experimental_enabled = entry.options.get(CONF_EXPERIMENTAL_SENSORS, False)
 
     entities = []
+    removed_sensor_entities: list[tuple[str, str]] = []
     for device_id in coordinator.data["devices"]:
         device = coordinator.get_device(device_id)
         if not device or not device.config:
             continue
+
+        removed_sensor_entities.extend(
+            (device_id, key)
+            for key in device.config.removed_entities.get("sensor", [])
+        )
 
         if sensor_configs := device.config.entities.get("sensor"):
             for config in sensor_configs:
@@ -55,6 +61,8 @@ async def async_setup_entry(
     # entity_registry_enabled_default only applies to first-time registration;
     # we must explicitly update already-registered entries.
     ent_reg = er.async_get(hass)
+    _remove_configured_sensor_entities(ent_reg, removed_sensor_entities)
+
     for entity in entities:
         if not isinstance(entity, RinnaiGenericSensor):
             continue
@@ -80,6 +88,21 @@ async def async_setup_entry(
             )
         elif should_enable and reg_entry.disabled_by == er.RegistryEntryDisabler.INTEGRATION:
             ent_reg.async_update_entity(entity_id, disabled_by=None)
+
+
+def _remove_configured_sensor_entities(
+    ent_reg: er.EntityRegistry,
+    removed_sensor_entities: list[tuple[str, str]],
+) -> None:
+    """Remove stale sensor entities that are no longer declared by config."""
+    for device_id, key in removed_sensor_entities:
+        entity_id = ent_reg.async_get_entity_id(
+            "sensor",
+            DOMAIN,
+            f"{device_id}_{key}",
+        )
+        if entity_id:
+            ent_reg.async_remove(entity_id)
 
 
 class RinnaiGenericSensor(RinnaiEntity, SensorEntity, RestoreEntity):

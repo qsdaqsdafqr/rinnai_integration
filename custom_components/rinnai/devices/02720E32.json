@@ -21,6 +21,12 @@
         "bytes_per_mode": 3,
         "mode_count": 1
     },
+    "removed_entities": {
+        "sensor": [
+            "operation_mode",
+            "error_code"
+        ]
+    },
     "processors": {
         "hotWaterTempSetting": [
             "hex_to_int"

@@ -21,6 +21,9 @@ class RinnaiDeviceConfig:
     # Schedule configuration
     schedule_config: dict[str, Any] = field(default_factory=dict)
 
+    # Entity registry cleanup for entities removed from a device config
+    removed_entities: dict[str, list[str]] = field(default_factory=dict)
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> RinnaiDeviceConfig:
         """Create config from dictionary."""
@@ -31,5 +34,6 @@ class RinnaiDeviceConfig:
             processors=data.get("processors", {}),
             features=data.get("features", {}),
             supported_requests=data.get("supported_requests", []),
-            schedule_config=data.get("schedule_config", {})
+            schedule_config=data.get("schedule_config", {}),
+            removed_entities=data.get("removed_entities", {}),
         )

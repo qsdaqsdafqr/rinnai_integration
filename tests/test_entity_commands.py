@@ -721,3 +721,38 @@ def test_disabled_sensor_is_hidden_by_default(
 
     assert entity.disabled_by_default is True
     assert entity._attr_entity_registry_enabled_default is False
+
+
+def test_removed_sensor_entities_are_removed_from_registry(
+    entity_modules: SimpleNamespace,
+) -> None:
+    class FakeRegistry:
+        def __init__(self) -> None:
+            self.entities = {
+                ("sensor", "rinnai", "dev1_operation_mode"): "sensor.dev1_operation_mode",
+                ("sensor", "rinnai", "dev1_error_code"): "sensor.dev1_error_code",
+            }
+            self.removed: list[str] = []
+
+        def async_get_entity_id(
+            self,
+            domain: str,
+            platform: str,
+            unique_id: str,
+        ) -> str | None:
+            return self.entities.get((domain, platform, unique_id))
+
+        def async_remove(self, entity_id: str) -> None:
+            self.removed.append(entity_id)
+
+    registry = FakeRegistry()
+
+    entity_modules.sensor._remove_configured_sensor_entities(
+        registry,
+        [("dev1", "operation_mode"), ("dev1", "error_code"), ("dev1", "missing")],
+    )
+
+    assert registry.removed == [
+        "sensor.dev1_operation_mode",
+        "sensor.dev1_error_code",
+    ]
