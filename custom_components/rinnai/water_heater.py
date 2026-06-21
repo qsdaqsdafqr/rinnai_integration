@@ -236,6 +236,12 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
 
     async def _async_refresh_after_relative_temperature_step(self) -> None:
         """Refresh state after a relative temperature command when possible."""
+        refresh_device_state = getattr(self.coordinator, "async_refresh_device_state", None)
+        if refresh_device_state:
+            if await refresh_device_state(self._device_id):
+                self._update_attributes()
+                return
+
         refresh = getattr(self.coordinator, "async_request_refresh", None)
         if refresh:
             await refresh()

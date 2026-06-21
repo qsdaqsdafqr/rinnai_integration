@@ -429,6 +429,9 @@ class TestEntityPlatforms:
         assert power["command_key"] == "power"
         assert power["command_on"] == "01"
         assert power["command_off"] == "00"
+        assert power["state_attribute"] == "operation_mode"
+        assert power["on_values"] == ["E0", "A0", "C1", "81", "90"]
+        assert power["off_values"] == ["20"]
 
         cycle_insulation = switches["cycle_insulation"]
         assert cycle_insulation["command_key"] == "temporaryCycleInsulationSetting"

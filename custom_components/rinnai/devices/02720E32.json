@@ -66,7 +66,6 @@
         "child_lock": "childLock",
         "faucet_not_close": "faucetNotCloseSign",
         "hot_water_useable": "hotWaterUseableSign",
-        "power": "power",
         "byte_str": "byteStr",
         "monthly_gas_consumption": "monthlyGasConsumption",
         "yearly_gas_consumption": "yearlyGasConsumption",
@@ -317,8 +316,17 @@
                 "command_key": "power",
                 "command_on": "01",
                 "command_off": "00",
-                "state_attribute": "power",
-                "on_value": "01"
+                "state_attribute": "operation_mode",
+                "on_values": [
+                    "E0",
+                    "A0",
+                    "C1",
+                    "81",
+                    "90"
+                ],
+                "off_values": [
+                    "20"
+                ]
             },
             {
                 "key": "cycle_insulation",

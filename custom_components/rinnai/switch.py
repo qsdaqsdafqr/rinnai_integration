@@ -109,8 +109,21 @@ class RinnaiCommandSwitch(RinnaiEntity, SwitchEntity):
         self._command_on: str = config["command_on"]
         self._command_off: str = config["command_off"]
         self._state_attribute: str | None = config.get("state_attribute")
-        self._on_value: str = config.get("on_value", self._command_on)
+        on_config = config.get("on_values", config.get("on_value"))
+        if on_config is None and "off_values" not in config:
+            on_config = self._command_on
+        self._on_values = self._configured_values(on_config)
+        self._off_values = self._configured_values(config.get("off_values"))
         self._update_attributes()
+
+    @staticmethod
+    def _configured_values(value: Any) -> set[str]:
+        """Normalize configured state values for robust comparison."""
+        if value is None:
+            return set()
+        if isinstance(value, list):
+            return {str(item).upper() for item in value}
+        return {str(value).upper()}
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -120,7 +133,13 @@ class RinnaiCommandSwitch(RinnaiEntity, SwitchEntity):
     def _update_attributes(self) -> None:
         if self._state_attribute:
             val = self.get_state_value(self._state_attribute)
-            self._attr_is_on = (val == self._on_value)
+            normalized = str(val).upper() if val is not None else None
+            if normalized is None:
+                self._attr_is_on = None
+            elif self._on_values:
+                self._attr_is_on = normalized in self._on_values
+            elif self._off_values:
+                self._attr_is_on = normalized not in self._off_values
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         if await self.coordinator.async_send_command(

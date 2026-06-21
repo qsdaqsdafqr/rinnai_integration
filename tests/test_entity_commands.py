@@ -22,6 +22,7 @@ def _install_homeassistant_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
         "homeassistant.components",
         "homeassistant.components.water_heater",
         "homeassistant.components.select",
+        "homeassistant.components.switch",
         "homeassistant.components.sensor",
         "homeassistant.config_entries",
         "homeassistant.const",
@@ -74,6 +75,10 @@ def _install_homeassistant_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
         def async_write_ha_state(self) -> None:
             self._write_count = getattr(self, "_write_count", 0) + 1
 
+    class SwitchEntity:
+        def async_write_ha_state(self) -> None:
+            self._write_count = getattr(self, "_write_count", 0) + 1
+
     class SensorEntityDescription:
         def __init__(self, **kwargs: Any) -> None:
             self.__dict__.update(kwargs)
@@ -98,6 +103,7 @@ def _install_homeassistant_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     modules["homeassistant.components.water_heater"].WaterHeaterEntity = WaterHeaterEntity
     modules["homeassistant.components.water_heater"].WaterHeaterEntityFeature = WaterHeaterEntityFeature
     modules["homeassistant.components.select"].SelectEntity = SelectEntity
+    modules["homeassistant.components.switch"].SwitchEntity = SwitchEntity
     modules["homeassistant.components.sensor"].SensorEntity = SensorEntity
     modules["homeassistant.components.sensor"].SensorEntityDescription = SensorEntityDescription
     modules["homeassistant.components.sensor"].SensorDeviceClass = SensorDeviceClass
@@ -172,19 +178,35 @@ def entity_modules(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         RINNAI_ROOT / "select.py",
         monkeypatch,
     )
+    switch = _load_module(
+        "custom_components.rinnai.switch",
+        RINNAI_ROOT / "switch.py",
+        monkeypatch,
+    )
     sensor = _load_module(
         "custom_components.rinnai.sensor",
         RINNAI_ROOT / "sensor.py",
         monkeypatch,
     )
 
-    return SimpleNamespace(water_heater=water_heater, select=select, sensor=sensor)
+    return SimpleNamespace(
+        water_heater=water_heater,
+        select=select,
+        switch=switch,
+        sensor=sensor,
+    )
 
 
 class StubCoordinator:
-    def __init__(self, raw_data: dict[str, Any], state_mapping: dict[str, str]) -> None:
+    def __init__(
+        self,
+        raw_data: dict[str, Any],
+        state_mapping: dict[str, str],
+        temperature_steps: list[int] | None = None,
+    ) -> None:
         self.commands: list[dict[str, Any]] = []
         self.refresh_count = 0
+        self.temperature_steps = temperature_steps
         self.state = SimpleNamespace(raw_data=raw_data)
         self.device = SimpleNamespace(
             online=True,
@@ -212,9 +234,22 @@ class StubCoordinator:
         self.refresh_count += 1
         command = self.commands[-1] if self.commands else {}
         if command.get("hotWaterTempOperate") == "01":
-            self.state.raw_data["hotWaterTempSetting"] += 1
+            self._step_temperature(1)
         elif command.get("hotWaterTempOperate") == "00":
-            self.state.raw_data["hotWaterTempSetting"] -= 1
+            self._step_temperature(-1)
+
+    async def async_refresh_device_state(self, device_id: str) -> bool:
+        await self.async_request_refresh()
+        return True
+
+    def _step_temperature(self, direction: int) -> None:
+        current = self.state.raw_data["hotWaterTempSetting"]
+        if self.temperature_steps and current in self.temperature_steps:
+            idx = self.temperature_steps.index(current) + direction
+            if 0 <= idx < len(self.temperature_steps):
+                self.state.raw_data["hotWaterTempSetting"] = self.temperature_steps[idx]
+                return
+        self.state.raw_data["hotWaterTempSetting"] += direction
 
 
 def _e32_config() -> dict[str, Any]:
@@ -256,6 +291,51 @@ async def test_relative_temperature_decreases_one_step(entity_modules: SimpleNam
     assert coordinator.commands == [{"hotWaterTempOperate": "00"}]
     assert coordinator.refresh_count == 1
     assert coordinator.state.raw_data["hotWaterTempSetting"] == 40
+
+
+@pytest.mark.asyncio
+async def test_relative_temperature_reaches_requested_target(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = _e32_water_heater_config()
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 40, "operationMode": "E0"},
+        {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=43)
+
+    assert coordinator.commands == [
+        {"hotWaterTempOperate": "01"},
+        {"hotWaterTempOperate": "01"},
+        {"hotWaterTempOperate": "01"},
+    ]
+    assert coordinator.refresh_count == 3
+    assert coordinator.state.raw_data["hotWaterTempSetting"] == 43
+
+
+@pytest.mark.asyncio
+async def test_relative_temperature_uses_allowed_temperature_steps(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = _e32_water_heater_config()
+    allowed = config["relative_temperature_control"]["allowed_temps_by_mode"]["E0"]
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 48, "operationMode": "E0"},
+        {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
+        temperature_steps=allowed,
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=55)
+
+    assert coordinator.commands == [
+        {"hotWaterTempOperate": "01"},
+        {"hotWaterTempOperate": "01"},
+    ]
+    assert coordinator.refresh_count == 2
+    assert coordinator.state.raw_data["hotWaterTempSetting"] == 55
 
 
 @pytest.mark.asyncio
@@ -382,6 +462,74 @@ def test_value_aliases_display_current_option(entity_modules: SimpleNamespace) -
     entity = entity_modules.select.RinnaiCommandSelect(coordinator, "dev1", config)
 
     assert entity._attr_current_option == "Kitchen"
+
+
+def test_command_switch_matches_multiple_on_values(entity_modules: SimpleNamespace) -> None:
+    config = next(item for item in _e32_config()["entities"]["switch"] if item["key"] == "power")
+    coordinator = StubCoordinator(
+        {"operationMode": "A0"},
+        {"operation_mode": "operationMode"},
+    )
+    entity = entity_modules.switch.RinnaiCommandSwitch(coordinator, "dev1", config)
+
+    assert entity._attr_is_on is True
+
+    coordinator.state.raw_data["operationMode"] = "20"
+    entity._update_attributes()
+
+    assert entity._attr_is_on is False
+
+
+def test_command_switch_default_on_value_behavior_unchanged(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = {
+        "name": "Cycle Insulation",
+        "key": "cycle_insulation",
+        "command_key": "temporaryCycleInsulationSetting",
+        "command_on": "01",
+        "command_off": "00",
+        "state_attribute": "cycle_insulation",
+        "on_value": 1,
+    }
+    coordinator = StubCoordinator(
+        {"temporaryCycleInsulationSetting": 1},
+        {"cycle_insulation": "temporaryCycleInsulationSetting"},
+    )
+    entity = entity_modules.switch.RinnaiCommandSwitch(coordinator, "dev1", config)
+
+    assert entity._attr_is_on is True
+
+    coordinator.state.raw_data["temporaryCycleInsulationSetting"] = 0
+    entity._update_attributes()
+
+    assert entity._attr_is_on is False
+
+
+def test_command_switch_can_use_off_values_without_on_values(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = {
+        "name": "Power",
+        "key": "power",
+        "command_key": "power",
+        "command_on": "01",
+        "command_off": "00",
+        "state_attribute": "operation_mode",
+        "off_values": ["20"],
+    }
+    coordinator = StubCoordinator(
+        {"operationMode": "E0"},
+        {"operation_mode": "operationMode"},
+    )
+    entity = entity_modules.switch.RinnaiCommandSwitch(coordinator, "dev1", config)
+
+    assert entity._attr_is_on is True
+
+    coordinator.state.raw_data["operationMode"] = "20"
+    entity._update_attributes()
+
+    assert entity._attr_is_on is False
 
 
 def test_sensor_fallback_uses_error_code_when_fault_code_is_empty(
