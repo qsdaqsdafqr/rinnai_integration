@@ -134,7 +134,7 @@ class RinnaiCommandSelect(RinnaiEntity, SelectEntity):
     def __init__(self, coordinator: RinnaiCoordinator, device_id: str, config: dict[str, Any]) -> None:
         super().__init__(coordinator, device_id, config)
         self._command_key: str | None = config.get("command_key")
-        self._options_map: dict[str, Any] = config["options_map"]
+        self._options_map: dict[str, str] = config["options_map"]
         self._option_commands: dict[str, dict[str, Any]] = config.get("option_commands", {})
         self._value_to_label = self._build_value_to_label_map(config)
         self._state_attribute: str | None = config.get("state_attribute")

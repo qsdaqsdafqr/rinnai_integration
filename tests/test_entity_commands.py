@@ -545,6 +545,28 @@ async def test_options_map_default_behavior_unchanged(entity_modules: SimpleName
     assert coordinator.commands == [{"operationMode": "00"}]
 
 
+@pytest.mark.asyncio
+async def test_e32_cycle_mode_uses_raw_string_values(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = next(
+        item
+        for item in _e32_config()["entities"]["select"]
+        if item["key"] == "cycle_mode"
+    )
+    coordinator = StubCoordinator(
+        {"cycleModeSetting": "01"},
+        {"cycle_mode": "cycleModeSetting"},
+    )
+    entity = entity_modules.select.RinnaiCommandSelect(coordinator, "dev1", config)
+
+    assert entity._attr_current_option == "节能"
+
+    await entity.async_select_option("舒适")
+
+    assert coordinator.commands == [{"cycleModeSetting": "02"}]
+
+
 def test_value_aliases_display_current_option(entity_modules: SimpleNamespace) -> None:
     config = next(
         item
@@ -647,6 +669,28 @@ def test_command_switch_default_on_value_behavior_unchanged(
     assert entity._attr_is_on is True
 
     coordinator.state.raw_data["temporaryCycleInsulationSetting"] = 0
+    entity._update_attributes()
+
+    assert entity._attr_is_on is False
+
+
+def test_e32_cycle_insulation_matches_raw_string_values(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = next(
+        item
+        for item in _e32_config()["entities"]["switch"]
+        if item["key"] == "cycle_insulation"
+    )
+    coordinator = StubCoordinator(
+        {"temporaryCycleInsulationSetting": "01"},
+        {"cycle_insulation": "temporaryCycleInsulationSetting"},
+    )
+    entity = entity_modules.switch.RinnaiCommandSwitch(coordinator, "dev1", config)
+
+    assert entity._attr_is_on is True
+
+    coordinator.state.raw_data["temporaryCycleInsulationSetting"] = "00"
     entity._update_attributes()
 
     assert entity._attr_is_on is False

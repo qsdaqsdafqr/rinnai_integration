@@ -25,12 +25,6 @@
         "hotWaterTempSetting": [
             "hex_to_int"
         ],
-        "cycleModeSetting": [
-            "hex_to_int"
-        ],
-        "temporaryCycleInsulationSetting": [
-            "hex_to_int"
-        ],
         "childLock": [
             "hex_to_int"
         ],
@@ -329,7 +323,7 @@
                 "command_on": "01",
                 "command_off": "00",
                 "state_attribute": "cycle_insulation",
-                "on_value": 1
+                "on_value": "01"
             },
             {
                 "key": "hot_water_reservation_switch",
@@ -346,9 +340,9 @@
                 "command_key": "cycleModeSetting",
                 "state_attribute": "cycle_mode",
                 "options_map": {
-                    "标准": 0,
-                    "节能": 1,
-                    "舒适": 2
+                    "标准": "00",
+                    "节能": "01",
+                    "舒适": "02"
                 },
                 "option_commands": {
                     "标准": {

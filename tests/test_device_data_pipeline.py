@@ -20,6 +20,7 @@ DIRECT_FIELD_VALUES: dict[str, Any] = {
     "bathWaterInjectionSetting": "1",
     "burningState": "30",
     "childLock": "00",
+    "cycleModeSetting": "02",
     "cycleReservationSetting1": "1",
     "errorCode": "00",
     "faucetNotCloseSign": "00",
@@ -223,4 +224,3 @@ def test_device_json_payload_flows_through_model_pipeline(
             f"{device_type}: state_mapping[{state_attr!r}] references "
             f"{raw_key!r}, but the model pipeline did not expose it"
         )
-

@@ -105,7 +105,7 @@ class TestStateMappingConsistency:
         "heatingReservationMode", "hotWaterReservationMode",
         "faultCode", "errorCode",
         # E-series extras
-        "massageMode", "temporaryCycleInsulationSetting",
+        "massageMode", "cycleModeSetting", "temporaryCycleInsulationSetting",
         "cycleReservationSetting1",
         # water softener
         "workMode", "saltLevel", "saltLow", "saltAlarm",
@@ -494,7 +494,7 @@ class TestEntityPlatforms:
         assert cycle_insulation["command_key"] == "temporaryCycleInsulationSetting"
         assert cycle_insulation["command_on"] == "01"
         assert cycle_insulation["command_off"] == "00"
-        assert cycle_insulation["on_value"] == 1
+        assert cycle_insulation["on_value"] == "01"
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
     def test_e32_burning_state_maps_standby_codes(self, device_type):
@@ -528,9 +528,9 @@ class TestEntityPlatforms:
         selects = {s["key"]: s for s in d["entities"]["select"]}
         cycle_mode = selects["cycle_mode"]
         assert cycle_mode["options_map"] == {
-            "标准": 0,
-            "节能": 1,
-            "舒适": 2,
+            "标准": "00",
+            "节能": "01",
+            "舒适": "02",
         }
         assert cycle_mode["option_commands"]["标准"] == {"cycleModeSetting": "00"}
         assert cycle_mode["option_commands"]["节能"] == {"cycleModeSetting": "01"}
@@ -777,8 +777,8 @@ class TestEndToEndStatePipeline:
         }
         result = process_data(raw, d["processors"])
         assert result["hotWaterTempSetting"] == 40
-        assert result["cycleModeSetting"] == 2
-        assert result["temporaryCycleInsulationSetting"] == 1
+        assert result["cycleModeSetting"] == "02"
+        assert result["temporaryCycleInsulationSetting"] == "01"
         assert result["childLock"] == 1
         assert result["faucetNotCloseSign"] == 0
         assert result["hotWaterUseableSign"] == 1
