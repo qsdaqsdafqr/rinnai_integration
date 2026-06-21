@@ -555,6 +555,26 @@ def test_schedule_text_exposes_notes(entity_modules: SimpleNamespace) -> None:
     assert entity._attr_extra_state_attributes["格式"] == "HH:MM-HH:MM，例如 06:00-23:00。"
 
 
+def test_reservation_sensor_uses_localized_labels_and_notes(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = next(
+        item for item in _e32_config()["entities"]["sensor"] if item["key"] == "hot_water_reservation"
+    )
+    coordinator = StubCoordinator(
+        {"byteStr": "0100C0FF7F000000000000000000000000"},
+        {"byte_str": "byteStr"},
+    )
+    entity = entity_modules.sensor.RinnaiHeatingReservationSensor(
+        coordinator,
+        "dev1",
+        config,
+    )
+
+    assert entity._attr_native_value == "开启"
+    assert entity._attr_extra_state_attributes["说明"].startswith("E32 循环预约")
+
+
 def test_command_switch_matches_multiple_on_values(entity_modules: SimpleNamespace) -> None:
     config = next(item for item in _e32_config()["entities"]["switch"] if item["key"] == "power")
     coordinator = StubCoordinator(

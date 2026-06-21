@@ -166,6 +166,7 @@ class RinnaiHeatingReservationSensor(RinnaiEntity, SensorEntity):
         self._on_label = config.get("on_label", "On")
         self._off_label = config.get("off_label", "Off")
         self._extra_state_attributes = config.get("extra_state_attributes", {})
+        self._update_attributes()
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -180,6 +181,7 @@ class RinnaiHeatingReservationSensor(RinnaiEntity, SensorEntity):
         
         if not self.schedule_manager.validate_hex(raw_hex):
             self._attr_native_value = "Unknown"
+            self._attr_extra_state_attributes = dict(self._extra_state_attributes)
             return
 
         is_on = self.schedule_manager.parse_status(raw_hex)
