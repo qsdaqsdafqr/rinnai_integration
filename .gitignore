@@ -8,7 +8,6 @@ __pycache__/
 *.log
 
 .env
-.venv/
 .*.swp
 .vscode/
 .idea/

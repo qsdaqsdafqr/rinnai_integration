@@ -288,40 +288,6 @@ def _e32_water_heater_config() -> dict[str, Any]:
     return config
 
 
-def test_display_order_adds_invisible_sort_prefix(
-    entity_modules: SimpleNamespace,
-) -> None:
-    config = {
-        "name": "Power",
-        "key": "power",
-        "display_order": 3,
-        "command_key": "power",
-        "command_on": "01",
-        "command_off": "00",
-    }
-    coordinator = StubCoordinator({}, {})
-
-    entity = entity_modules.switch.RinnaiCommandSwitch(coordinator, "dev1", config)
-
-    assert entity._attr_name[1:] == "Power"
-    assert ord(entity._attr_name[0]) == 0xE0004
-
-
-def test_display_order_is_opt_in(entity_modules: SimpleNamespace) -> None:
-    config = {
-        "name": "Power",
-        "key": "power",
-        "command_key": "power",
-        "command_on": "01",
-        "command_off": "00",
-    }
-    coordinator = StubCoordinator({}, {})
-
-    entity = entity_modules.switch.RinnaiCommandSwitch(coordinator, "dev1", config)
-
-    assert entity._attr_name == "Power"
-
-
 @pytest.mark.asyncio
 async def test_relative_temperature_increases_one_step(entity_modules: SimpleNamespace) -> None:
     config = _e32_water_heater_config()
@@ -731,62 +697,3 @@ def test_sensor_fallback_uses_error_code_when_fault_code_is_empty(
     entity._update_attributes()
 
     assert entity._attr_native_value == "12"
-
-
-def test_disabled_sensor_is_hidden_by_default(
-    entity_modules: SimpleNamespace,
-) -> None:
-    config = {
-        "key": "disabled_diagnostic",
-        "name": "Disabled Diagnostic",
-        "entity_category": "diagnostic",
-        "state_attribute": "disabled_diagnostic",
-        "disabled_by_default": True,
-    }
-    coordinator = StubCoordinator(
-        {"disabledDiagnostic": "12"},
-        {"disabled_diagnostic": "disabledDiagnostic"},
-    )
-    entity = entity_modules.sensor.RinnaiGenericSensor(
-        coordinator,
-        "dev1",
-        config,
-    )
-
-    assert entity.disabled_by_default is True
-    assert entity._attr_entity_registry_enabled_default is False
-
-
-def test_removed_sensor_entities_are_removed_from_registry(
-    entity_modules: SimpleNamespace,
-) -> None:
-    class FakeRegistry:
-        def __init__(self) -> None:
-            self.entities = {
-                ("sensor", "rinnai", "dev1_operation_mode"): "sensor.dev1_operation_mode",
-                ("sensor", "rinnai", "dev1_error_code"): "sensor.dev1_error_code",
-            }
-            self.removed: list[str] = []
-
-        def async_get_entity_id(
-            self,
-            domain: str,
-            platform: str,
-            unique_id: str,
-        ) -> str | None:
-            return self.entities.get((domain, platform, unique_id))
-
-        def async_remove(self, entity_id: str) -> None:
-            self.removed.append(entity_id)
-
-    registry = FakeRegistry()
-
-    entity_modules.sensor._remove_configured_sensor_entities(
-        registry,
-        [("dev1", "operation_mode"), ("dev1", "error_code"), ("dev1", "missing")],
-    )
-
-    assert registry.removed == [
-        "sensor.dev1_operation_mode",
-        "sensor.dev1_error_code",
-    ]

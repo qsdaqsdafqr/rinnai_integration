@@ -14,30 +14,6 @@ from .core.schedule_manager import RinnaiScheduleManager
 
 _LOGGER = logging.getLogger(__name__)
 
-_SORT_PREFIX_BASE = 0xE0001
-_SORT_PREFIX_MAX_ORDER = 0x7D
-
-
-def _name_with_sort_prefix(name: str, display_order: Any) -> str:
-    """Prefix a name with an invisible sort key for HA's device page."""
-    if display_order is None:
-        return name
-
-    try:
-        order = int(display_order)
-    except (TypeError, ValueError):
-        _LOGGER.warning("Ignoring invalid display_order value: %s", display_order)
-        return name
-
-    if order < 1 or order > _SORT_PREFIX_MAX_ORDER:
-        _LOGGER.warning("Ignoring display_order outside supported range: %s", order)
-        return name
-
-    # HA's device page sorts entities by display name. Unicode tag characters
-    # are invisible in the UI but still provide a deterministic sort key.
-    return f"{chr(_SORT_PREFIX_BASE + order)}{name}"
-
-
 class RinnaiEntity(CoordinatorEntity, Entity):
     """Base class for Rinnai entities."""
 
@@ -64,9 +40,7 @@ class RinnaiEntity(CoordinatorEntity, Entity):
             
             # Set name if provided in config
             if name := entity_config.get("name"):
-                self._attr_name = _name_with_sort_prefix(
-                    name, entity_config.get("display_order")
-                )
+                self._attr_name = name
                 
             if translation_key := entity_config.get("key"):
                 self._attr_translation_key = translation_key

@@ -23,7 +23,7 @@
                 "name": "Burning State"
             },
             "gas_usage": {
-                "name": "Total Gas Usage"
+                "name": "Gas Usage"
             },
             "heating_temperature_hes": {
                 "name": "Heating Temperature (Energy Saving)"
@@ -53,7 +53,7 @@
                 "name": "Heating Burning Times"
             },
             "hot_water_burning_times": {
-                "name": "Total Ignition Count"
+                "name": "Hot Water Burning Times"
             },
             "heating_reservation": {
                 "name": "Heating Reservation Status"
@@ -113,7 +113,7 @@
         },
         "water_heater": {
             "rinnai": {
-                "name": "Set Temperature",
+                "name": "Water Heater",
                 "state_attributes": {
                     "operation_mode": {
                         "state": {

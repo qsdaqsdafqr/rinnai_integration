@@ -17,6 +17,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import RinnaiCoordinator
 from .entity import RinnaiEntity
+from .relative_temperature import (
+    async_set_relative_temperature,
+    current_temperature,
+    resolve_target_temperature,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,7 +80,8 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         )
         self._attr_operation_list = [self._operation_mode]
         self._attr_current_operation = self._operation_mode
-        self._attr_extra_state_attributes = {}
+        if self._relative_temperature_control:
+            self._attr_extra_state_attributes = {}
 
         self._update_attributes()
 
@@ -134,130 +140,41 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
             self._attr_target_temperature = float(temperature)
             self.async_write_ha_state()
 
-    def _current_temperature(self) -> int | None:
-        """Return current target temperature from device state."""
-        try:
-            current = self.get_state_value(self._state_attribute)
-            return int(current) if current is not None else None
-        except (ValueError, TypeError):
-            return None
-
-    def _allowed_temperatures_for_current_mode(self) -> list[int] | None:
-        """Return configured allowed temperatures for the current raw mode."""
-        control = self._relative_temperature_control or {}
-        allowed_by_mode = control.get("allowed_temps_by_mode")
-        if not allowed_by_mode:
-            return None
-
-        mode_attribute = control.get("mode_attribute", "operation_mode")
-        raw_mode = self.get_state_value(mode_attribute)
-        if raw_mode is None:
-            _LOGGER.warning(
-                "Device %s: cannot validate temperature without %s",
-                self._device_id,
-                mode_attribute,
-            )
-            return []
-
-        allowed = allowed_by_mode.get(str(raw_mode).upper())
-        if allowed is None:
-            _LOGGER.warning(
-                "Device %s: unknown operation mode %s for temperature validation",
-                self._device_id,
-                raw_mode,
-            )
-            return []
-
-        return [int(temp) for temp in allowed]
-
     async def _async_set_relative_temperature(self, temperature: int) -> None:
         """Set target temperature via configured relative up/down commands."""
         control = self._relative_temperature_control or {}
-        command_key = control.get("command_key")
-        increase_value = control.get("increase")
-        decrease_value = control.get("decrease")
-        if not command_key or increase_value is None or decrease_value is None:
-            _LOGGER.warning(
-                "Device %s: invalid relative temperature control config",
-                self._device_id,
-            )
+        target = resolve_target_temperature(
+            self._device_id,
+            temperature,
+            control,
+            self.get_state_value,
+        )
+        if target.target is None:
             return
 
-        allowed_temps = self._allowed_temperatures_for_current_mode()
-        if allowed_temps is not None and temperature not in allowed_temps:
-            if not allowed_temps or not control.get("adjust_unsupported_temperature"):
-                _LOGGER.warning(
-                    "Device %s: temperature %sC is not allowed for current mode",
-                    self._device_id,
-                    temperature,
-                )
-                return
-
-            requested_temperature = temperature
-            temperature = self._nearest_supported_temperature(temperature, allowed_temps)
-            self._set_temperature_notice(requested_temperature, temperature)
-            _LOGGER.warning(
-                "Device %s: temperature %sC is not allowed for current mode; using nearest supported %sC",
-                self._device_id,
-                requested_temperature,
-                temperature,
-            )
+        if target.adjusted:
+            self._set_temperature_notice(target.requested, target.target)
         else:
             self._clear_temperature_notice()
 
-        current = self._current_temperature()
-        if current is None:
-            _LOGGER.warning(
-                "Device %s: cannot set relative temperature without current state",
-                self._device_id,
-            )
+        if current_temperature(self._state_attribute, self.get_state_value) == target.target:
             return
 
-        if current == temperature:
-            return
-
-        max_steps = abs(temperature - current)
-        if allowed_temps and current in allowed_temps and temperature in allowed_temps:
-            max_steps = abs(
-                allowed_temps.index(temperature) - allowed_temps.index(current)
-            )
-        max_steps = max(max_steps, 1)
-        refresh_retries = self._relative_refresh_retries(control)
-
-        self._set_changing_operation(temperature)
+        self._set_changing_operation(target.target)
         try:
-            for _ in range(max_steps):
-                current = self._current_temperature()
-                if current is None:
-                    return
-                if current == temperature:
-                    self._attr_target_temperature = float(temperature)
-                    self.async_write_ha_state()
-                    return
-
-                command_value = increase_value if temperature > current else decrease_value
-                success = await self.coordinator.async_send_command(
-                    self._device_id, {command_key: command_value}
-                )
-                if not success:
-                    return
-
-                previous = current
-                for _ in range(refresh_retries):
-                    await self._async_refresh_after_relative_temperature_step()
-                    current = self._current_temperature()
-                    if current == temperature or current != previous:
-                        break
-                if current == temperature:
-                    self._attr_target_temperature = float(temperature)
-                    self.async_write_ha_state()
-                    return
-                if current == previous:
-                    _LOGGER.warning(
-                        "Device %s: temperature did not change after relative command; stopping",
-                        self._device_id,
-                    )
-                    return
+            result = await async_set_relative_temperature(
+                device_id=self._device_id,
+                target_temperature=target.target,
+                state_attribute=self._state_attribute,
+                control=control,
+                allowed_temps=target.allowed_temps,
+                get_state_value=self.get_state_value,
+                send_command=self._async_send_relative_temperature_command,
+                refresh_state=self._async_refresh_after_relative_temperature_step,
+            )
+            if result.reached_target:
+                self._attr_target_temperature = float(target.target)
+                self.async_write_ha_state()
         finally:
             self._restore_operation()
 
@@ -306,24 +223,12 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         self._attr_current_operation = self._operation_mode
         self.async_write_ha_state()
 
-    @staticmethod
-    def _nearest_supported_temperature(
-        temperature: int,
-        allowed_temps: list[int],
-    ) -> int:
-        """Return the closest allowed target, preferring the warmer value on ties."""
-        return min(
-            allowed_temps,
-            key=lambda allowed: (abs(allowed - temperature), -allowed),
-        )
-
-    @staticmethod
-    def _relative_refresh_retries(control: dict[str, Any]) -> int:
-        """Return how many times to poll state after a relative step."""
-        try:
-            return max(1, int(control.get("refresh_retries", 1)))
-        except (ValueError, TypeError):
-            return 1
+    async def _async_send_relative_temperature_command(
+        self,
+        command: dict[str, Any],
+    ) -> bool:
+        """Send one relative temperature command."""
+        return await self.coordinator.async_send_command(self._device_id, command)
 
     async def _async_refresh_after_relative_temperature_step(self) -> None:
         """Refresh state after a relative temperature command when possible."""
