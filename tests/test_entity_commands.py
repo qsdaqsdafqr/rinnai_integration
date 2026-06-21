@@ -555,7 +555,7 @@ async def test_e32_cycle_mode_uses_raw_string_values(
         if item["key"] == "cycle_mode"
     )
     coordinator = StubCoordinator(
-        {"cycleModeSetting": "01"},
+        {"cycleModeSetting": "1"},
         {"cycle_mode": "cycleModeSetting"},
     )
     entity = entity_modules.select.RinnaiCommandSelect(coordinator, "dev1", config)

@@ -532,6 +532,11 @@ class TestEntityPlatforms:
             "节能": "01",
             "舒适": "02",
         }
+        assert cycle_mode["value_aliases"] == {
+            "标准": ["0"],
+            "节能": ["1"],
+            "舒适": ["2"],
+        }
         assert "option_commands" not in cycle_mode
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
