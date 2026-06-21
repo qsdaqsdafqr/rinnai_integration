@@ -1,6 +1,6 @@
 [project]
 name = "rinnai-integration"
-version = "1.0.13"
+version = "1.0.14"
 description = "Home Assistant integration for Rinnai devices"
 requires-python = ">=3.11"
 dependencies = []

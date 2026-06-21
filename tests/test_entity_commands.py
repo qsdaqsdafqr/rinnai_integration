@@ -23,6 +23,7 @@ def _install_homeassistant_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
         "homeassistant.components.water_heater",
         "homeassistant.components.select",
         "homeassistant.components.switch",
+        "homeassistant.components.text",
         "homeassistant.components.sensor",
         "homeassistant.config_entries",
         "homeassistant.const",
@@ -47,6 +48,10 @@ def _install_homeassistant_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
 
         def async_write_ha_state(self) -> None:
             self._write_count = getattr(self, "_write_count", 0) + 1
+            self._written_operations = getattr(self, "_written_operations", [])
+            self._written_operations.append(
+                getattr(self, "_attr_current_operation", None)
+            )
 
     class Entity:
         pass
@@ -62,6 +67,10 @@ def _install_homeassistant_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
 
         def async_write_ha_state(self) -> None:
             self._write_count = getattr(self, "_write_count", 0) + 1
+            self._written_operations = getattr(self, "_written_operations", [])
+            self._written_operations.append(
+                getattr(self, "_attr_current_operation", None)
+            )
 
     class SelectEntity:
         @property
@@ -76,6 +85,10 @@ def _install_homeassistant_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
             self._write_count = getattr(self, "_write_count", 0) + 1
 
     class SwitchEntity:
+        def async_write_ha_state(self) -> None:
+            self._write_count = getattr(self, "_write_count", 0) + 1
+
+    class TextEntity:
         def async_write_ha_state(self) -> None:
             self._write_count = getattr(self, "_write_count", 0) + 1
 
@@ -104,6 +117,7 @@ def _install_homeassistant_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     modules["homeassistant.components.water_heater"].WaterHeaterEntityFeature = WaterHeaterEntityFeature
     modules["homeassistant.components.select"].SelectEntity = SelectEntity
     modules["homeassistant.components.switch"].SwitchEntity = SwitchEntity
+    modules["homeassistant.components.text"].TextEntity = TextEntity
     modules["homeassistant.components.sensor"].SensorEntity = SensorEntity
     modules["homeassistant.components.sensor"].SensorEntityDescription = SensorEntityDescription
     modules["homeassistant.components.sensor"].SensorDeviceClass = SensorDeviceClass
@@ -183,6 +197,11 @@ def entity_modules(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         RINNAI_ROOT / "switch.py",
         monkeypatch,
     )
+    text = _load_module(
+        "custom_components.rinnai.text",
+        RINNAI_ROOT / "text.py",
+        monkeypatch,
+    )
     sensor = _load_module(
         "custom_components.rinnai.sensor",
         RINNAI_ROOT / "sensor.py",
@@ -193,6 +212,7 @@ def entity_modules(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         water_heater=water_heater,
         select=select,
         switch=switch,
+        text=text,
         sensor=sensor,
     )
 
@@ -320,6 +340,24 @@ async def test_relative_temperature_reaches_requested_target(
     ]
     assert coordinator.refresh_count == 3
     assert coordinator.state.raw_data["hotWaterTempSetting"] == 43
+
+
+@pytest.mark.asyncio
+async def test_relative_temperature_displays_changing_operation(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = _e32_water_heater_config()
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 40, "operationMode": "E0"},
+        {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=41)
+
+    assert "正在更改至41℃" in entity._written_operations
+    assert entity._attr_current_operation == "热水"
+    assert entity._written_operations[-1] == "热水"
 
 
 @pytest.mark.asyncio
@@ -488,7 +526,33 @@ def test_value_aliases_display_current_option(entity_modules: SimpleNamespace) -
     )
     entity = entity_modules.select.RinnaiCommandSelect(coordinator, "dev1", config)
 
-    assert entity._attr_current_option == "Kitchen"
+    assert entity._attr_current_option == "厨房"
+
+
+def test_e32_operation_mode_does_not_display_off_option(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = _e32_config()["entities"]["select"][0]
+    coordinator = StubCoordinator(
+        {"operationMode": "20"},
+        {"operation_mode": "operationMode"},
+    )
+    entity = entity_modules.select.RinnaiCommandSelect(coordinator, "dev1", config)
+
+    assert entity._attr_options == ["普通", "厨房", "淋浴"]
+    assert entity._attr_current_option is None
+
+
+def test_schedule_text_exposes_notes(entity_modules: SimpleNamespace) -> None:
+    config = _e32_config()["entities"]["text"][0]
+    coordinator = StubCoordinator(
+        {"byteStr": "0100C0FF7F000000000000000000000000"},
+        {"byte_str": "byteStr"},
+    )
+    entity = entity_modules.text.RinnaiGenericText(coordinator, "dev1", config)
+
+    assert entity._attr_extra_state_attributes["说明"].startswith("按 24 小时位图")
+    assert entity._attr_extra_state_attributes["格式"] == "HH:MM-HH:MM，例如 06:00-23:00。"
 
 
 def test_command_switch_matches_multiple_on_values(entity_modules: SimpleNamespace) -> None:

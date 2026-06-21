@@ -322,6 +322,9 @@ class TestTemperatureEncoding:
         wh = d["entities"]["water_heater"][0]
         assert wh.get("temp_format", "hex2") != "hex4"
         assert "relative_temperature_control" in wh
+        assert wh["name"] == "热水器"
+        assert wh["operation_mode"] == "热水"
+        assert wh["changing_operation_template"] == "正在更改至{temperature}℃"
         control = wh["relative_temperature_control"]
         assert control["step_delay_seconds"] > 0
         assert control["refresh_retries"] > 1
@@ -446,9 +449,27 @@ class TestEntityPlatforms:
     def test_e32_burning_state_maps_standby_codes(self, device_type):
         d = load(device_type)
         sensors = {s["key"]: s for s in d["entities"]["sensor"]}
-        assert sensors["burning_state"]["value_map"]["0"] == "Standby"
-        assert sensors["burning_state"]["value_map"]["1"] == "Standby"
-        assert sensors["burning_state"]["value_map"]["30"] == "Standby"
+        assert sensors["burning_state"]["value_map"]["0"] == "待机"
+        assert sensors["burning_state"]["value_map"]["1"] == "待机"
+        assert sensors["burning_state"]["value_map"]["30"] == "待机"
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_operation_mode_select_is_localized_without_off(self, device_type):
+        d = load(device_type)
+        selects = {s["key"]: s for s in d["entities"]["select"]}
+        operation_mode = selects["operation_mode"]
+
+        assert operation_mode["name"] == "运行模式"
+        assert operation_mode["options_map"] == {
+            "普通": "E0",
+            "厨房": "C1",
+            "淋浴": "90",
+        }
+        assert "Off" not in operation_mode["options_map"]
+        assert "关机" not in operation_mode["options_map"]
+        assert operation_mode["option_commands"]["普通"] == {"regularMode": "01"}
+        assert operation_mode["option_commands"]["厨房"] == {"kitchenMode": "01"}
+        assert operation_mode["option_commands"]["淋浴"] == {"showerMode": "01"}
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
     def test_e32_cycle_mode_select_writes_hex_values(self, device_type):
@@ -456,13 +477,30 @@ class TestEntityPlatforms:
         selects = {s["key"]: s for s in d["entities"]["select"]}
         cycle_mode = selects["cycle_mode"]
         assert cycle_mode["options_map"] == {
-            "Standard": 0,
-            "Energy Saving": 1,
-            "Comfort": 2,
+            "标准": 0,
+            "节能": 1,
+            "舒适": 2,
         }
-        assert cycle_mode["option_commands"]["Standard"] == {"cycleModeSetting": "00"}
-        assert cycle_mode["option_commands"]["Energy Saving"] == {"cycleModeSetting": "01"}
-        assert cycle_mode["option_commands"]["Comfort"] == {"cycleModeSetting": "02"}
+        assert cycle_mode["option_commands"]["标准"] == {"cycleModeSetting": "00"}
+        assert cycle_mode["option_commands"]["节能"] == {"cycleModeSetting": "01"}
+        assert cycle_mode["option_commands"]["舒适"] == {"cycleModeSetting": "02"}
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_reservation_entities_have_notes(self, device_type):
+        d = load(device_type)
+        sensors = {s["key"]: s for s in d["entities"]["sensor"]}
+        texts = {t["key"]: t for t in d["entities"]["text"]}
+
+        reservation = sensors["hot_water_reservation"]
+        assert reservation["name"] == "热水预约状态"
+        assert reservation["on_label"] == "开启"
+        assert reservation["off_label"] == "关闭"
+        assert "说明" in reservation["extra_state_attributes"]
+
+        schedule = texts["schedule_mode_1"]
+        assert schedule["name"] == "循环预约设置"
+        assert "说明" in schedule["extra_state_attributes"]
+        assert "格式" in schedule["extra_state_attributes"]
 
     @pytest.mark.parametrize("device_type", E_MASSAGE)
     def test_e_massage_has_massage_switch(self, device_type):

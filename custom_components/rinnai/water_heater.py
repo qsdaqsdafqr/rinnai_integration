@@ -68,9 +68,10 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         self._temp_format = config.get("temp_format", "hex2")
         
         # Operation mode name from config, default to "Hot Water" if not specified (display only)
-        operation_mode = config.get("operation_mode", "Hot Water")
-        self._attr_operation_list = [operation_mode]
-        self._attr_current_operation = operation_mode
+        self._operation_mode = config.get("operation_mode", "Hot Water")
+        self._changing_operation_template = config.get("changing_operation_template")
+        self._attr_operation_list = [self._operation_mode]
+        self._attr_current_operation = self._operation_mode
 
         self._update_attributes()
 
@@ -206,38 +207,61 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         max_steps = max(max_steps, 1)
         refresh_retries = self._relative_refresh_retries(control)
 
-        for _ in range(max_steps):
-            current = self._current_temperature()
-            if current is None:
-                return
-            if current == temperature:
-                self._attr_target_temperature = float(temperature)
-                self.async_write_ha_state()
-                return
-
-            command_value = increase_value if temperature > current else decrease_value
-            success = await self.coordinator.async_send_command(
-                self._device_id, {command_key: command_value}
-            )
-            if not success:
-                return
-
-            previous = current
-            for _ in range(refresh_retries):
-                await self._async_refresh_after_relative_temperature_step()
+        self._set_changing_operation(temperature)
+        try:
+            for _ in range(max_steps):
                 current = self._current_temperature()
-                if current == temperature or current != previous:
-                    break
-            if current == temperature:
-                self._attr_target_temperature = float(temperature)
-                self.async_write_ha_state()
-                return
-            if current == previous:
-                _LOGGER.warning(
-                    "Device %s: temperature did not change after relative command; stopping",
-                    self._device_id,
+                if current is None:
+                    return
+                if current == temperature:
+                    self._attr_target_temperature = float(temperature)
+                    self.async_write_ha_state()
+                    return
+
+                command_value = increase_value if temperature > current else decrease_value
+                success = await self.coordinator.async_send_command(
+                    self._device_id, {command_key: command_value}
                 )
-                return
+                if not success:
+                    return
+
+                previous = current
+                for _ in range(refresh_retries):
+                    await self._async_refresh_after_relative_temperature_step()
+                    current = self._current_temperature()
+                    if current == temperature or current != previous:
+                        break
+                if current == temperature:
+                    self._attr_target_temperature = float(temperature)
+                    self.async_write_ha_state()
+                    return
+                if current == previous:
+                    _LOGGER.warning(
+                        "Device %s: temperature did not change after relative command; stopping",
+                        self._device_id,
+                    )
+                    return
+        finally:
+            self._restore_operation()
+
+    def _set_changing_operation(self, temperature: int) -> None:
+        """Show a configured in-progress operation while relative control runs."""
+        if not self._changing_operation_template:
+            return
+
+        operation = self._changing_operation_template.format(temperature=temperature)
+        self._attr_operation_list = [self._operation_mode, operation]
+        self._attr_current_operation = operation
+        self.async_write_ha_state()
+
+    def _restore_operation(self) -> None:
+        """Restore the configured normal operation label."""
+        if self._attr_current_operation == self._operation_mode:
+            return
+
+        self._attr_operation_list = [self._operation_mode]
+        self._attr_current_operation = self._operation_mode
+        self.async_write_ha_state()
 
     @staticmethod
     def _relative_refresh_retries(control: dict[str, Any]) -> int:

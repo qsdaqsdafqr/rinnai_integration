@@ -163,6 +163,9 @@ class RinnaiHeatingReservationSensor(RinnaiEntity, SensorEntity):
         super().__init__(coordinator, device_id, config)
         self._attr_translation_key = "heating_reservation"
         self._state_attribute = config["state_attribute"]
+        self._on_label = config.get("on_label", "On")
+        self._off_label = config.get("off_label", "Off")
+        self._extra_state_attributes = config.get("extra_state_attributes", {})
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -182,12 +185,13 @@ class RinnaiHeatingReservationSensor(RinnaiEntity, SensorEntity):
         is_on = self.schedule_manager.parse_status(raw_hex)
         mode_index = self.schedule_manager.parse_mode_index(raw_hex)
         
-        self._attr_native_value = "On" if is_on else "Off"
+        self._attr_native_value = self._on_label if is_on else self._off_label
         
-        attrs = {
+        attrs = dict(self._extra_state_attributes)
+        attrs.update({
             "current_mode_index": mode_index,
             "raw_hex": raw_hex
-        }
+        })
         
         # Parse modes using manager
         for i in range(self.schedule_manager.mode_count):
