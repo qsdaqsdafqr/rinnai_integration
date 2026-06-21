@@ -59,7 +59,7 @@
                 "name": "采暖点火次数"
             },
             "hot_water_burning_times": {
-                "name": "热水点火次数"
+                "name": "总计点火次数"
             },
             "heating_reservation": {
                 "name": "采暖预约状态"

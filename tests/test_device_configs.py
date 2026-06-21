@@ -405,44 +405,68 @@ class TestEntityPlatforms:
         assert "cycle_mode" in selects
         for key in (
             "hot_water_temp",
-            "operation_mode",
             "burning_state",
             "gas_usage",
             "hot_water_burning_times",
             "fault_code",
-            "error_code",
             "child_lock",
             "faucet_not_close",
             "hot_water_useable",
             "hot_water_reservation",
         ):
             assert key in sensors
+        assert "operation_mode" not in sensors
+        assert "error_code" not in sensors
         assert sensors["fault_code"]["fallback_state_attribute"] == "error_code"
         assert "00" in sensors["fault_code"]["fallback_when"]
+        assert sensors["hot_water_useable"]["name"] == "热水供应中"
+        assert sensors["hot_water_useable"]["value_map"] == {"0": "否", "1": "是"}
+        assert sensors["faucet_not_close"]["name"] == "水流状态"
+        assert sensors["faucet_not_close"]["value_map"] == {"0": "关", "1": "开"}
         assert sensors["gas_usage"]["name"] == "总计燃气用量"
-        assert sensors["error_code"]["disabled_by_default"] is True
+        assert sensors["hot_water_burning_times"]["name"] == "总计点火次数"
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
     def test_e32_diagnostic_sensor_order(self, device_type):
         d = load(device_type)
-        sensor_keys = [s["key"] for s in d["entities"]["sensor"]]
+        sensor_keys = [
+            s["key"]
+            for s in d["entities"]["sensor"]
+            if s.get("entity_category") == "diagnostic"
+        ]
 
         assert sensor_keys == [
-            "hot_water_temp",
-            "fault_code",
             "burning_state",
-            "operation_mode",
+            "hot_water_useable",
+            "fault_code",
             "child_lock",
             "faucet_not_close",
-            "hot_water_useable",
-            "hot_water_reservation",
-            "gas_usage",
+            "today_gas_consumption",
             "monthly_gas_consumption",
             "yearly_gas_consumption",
-            "today_gas_consumption",
-            "yesterday_gas_consumption",
+            "gas_usage",
             "hot_water_burning_times",
-            "error_code",
+            "yesterday_gas_consumption",
+        ]
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_control_entity_names_and_order(self, device_type):
+        d = load(device_type)
+
+        assert [s["key"] for s in d["entities"]["switch"]] == [
+            "power",
+            "cycle_insulation",
+            "hot_water_reservation_switch",
+        ]
+        assert d["entities"]["water_heater"][0]["name"] == "设定温度"
+        switches = {s["key"]: s for s in d["entities"]["switch"]}
+        assert switches["power"]["name"] == "电源"
+        assert switches["cycle_insulation"]["name"] == "一键循环(1h)"
+        assert switches["hot_water_reservation_switch"]["name"] == "循环预约"
+        assert d["entities"]["text"][0]["name"] == "循环预约设置"
+        assert [s["key"] for s in d["entities"]["select"]] == [
+            "cycle_mode",
+            "operation_mode",
         ]
 
     @pytest.mark.parametrize("device_type", E32_TYPES)

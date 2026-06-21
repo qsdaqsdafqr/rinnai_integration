@@ -546,7 +546,11 @@ async def test_options_map_default_behavior_unchanged(entity_modules: SimpleName
 
 
 def test_value_aliases_display_current_option(entity_modules: SimpleNamespace) -> None:
-    config = _e32_config()["entities"]["select"][0]
+    config = next(
+        item
+        for item in _e32_config()["entities"]["select"]
+        if item["key"] == "operation_mode"
+    )
     coordinator = StubCoordinator(
         {"operationMode": "81"},
         {"operation_mode": "operationMode"},
@@ -559,7 +563,11 @@ def test_value_aliases_display_current_option(entity_modules: SimpleNamespace) -
 def test_e32_operation_mode_does_not_display_off_option(
     entity_modules: SimpleNamespace,
 ) -> None:
-    config = _e32_config()["entities"]["select"][0]
+    config = next(
+        item
+        for item in _e32_config()["entities"]["select"]
+        if item["key"] == "operation_mode"
+    )
     coordinator = StubCoordinator(
         {"operationMode": "20"},
         {"operation_mode": "operationMode"},
@@ -694,12 +702,16 @@ def test_sensor_fallback_uses_error_code_when_fault_code_is_empty(
 def test_disabled_sensor_is_hidden_by_default(
     entity_modules: SimpleNamespace,
 ) -> None:
-    config = next(
-        item for item in _e32_config()["entities"]["sensor"] if item["key"] == "error_code"
-    )
+    config = {
+        "key": "disabled_diagnostic",
+        "name": "Disabled Diagnostic",
+        "entity_category": "diagnostic",
+        "state_attribute": "disabled_diagnostic",
+        "disabled_by_default": True,
+    }
     coordinator = StubCoordinator(
-        {"errorCode": "12"},
-        {"error_code": "errorCode"},
+        {"disabledDiagnostic": "12"},
+        {"disabled_diagnostic": "disabledDiagnostic"},
     )
     entity = entity_modules.sensor.RinnaiGenericSensor(
         coordinator,

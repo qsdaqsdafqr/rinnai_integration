@@ -53,7 +53,7 @@
                 "name": "Heating Burning Times"
             },
             "hot_water_burning_times": {
-                "name": "Hot Water Burning Times"
+                "name": "Total Ignition Count"
             },
             "heating_reservation": {
                 "name": "Heating Reservation Status"
