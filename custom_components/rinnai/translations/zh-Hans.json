@@ -29,7 +29,7 @@
                 }
             },
             "gas_usage": {
-                "name": "当前燃气用量"
+                "name": "总计燃气用量"
             },
             "hot_water_temp": {
                 "name": "生活热水设定温度"
@@ -118,7 +118,7 @@
         },
         "water_heater": {
             "main": {
-                "name": "热水器",
+                "name": "设定温度",
                 "state": {
                     "Hot Water": "热水"
                 },

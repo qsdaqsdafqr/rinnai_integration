@@ -23,7 +23,7 @@
                 "name": "Burning State"
             },
             "gas_usage": {
-                "name": "Gas Usage"
+                "name": "Total Gas Usage"
             },
             "heating_temperature_hes": {
                 "name": "Heating Temperature (Energy Saving)"
@@ -113,7 +113,7 @@
         },
         "water_heater": {
             "rinnai": {
-                "name": "Water Heater",
+                "name": "Set Temperature",
                 "state_attributes": {
                     "operation_mode": {
                         "state": {

@@ -322,12 +322,15 @@ class TestTemperatureEncoding:
         wh = d["entities"]["water_heater"][0]
         assert wh.get("temp_format", "hex2") != "hex4"
         assert "relative_temperature_control" in wh
-        assert wh["name"] == "热水器"
+        assert wh["name"] == "设定温度"
         assert wh["operation_mode"] == "热水"
         assert wh["changing_operation_template"] == "正在更改至{temperature}℃"
+        assert wh["temperature_notice_attribute"] == "温度提示"
         control = wh["relative_temperature_control"]
         assert control["step_delay_seconds"] > 0
         assert control["refresh_retries"] > 1
+        assert control["adjust_unsupported_temperature"] is True
+        assert control["unsupported_temperature_template"] == "不支持{requested}℃，已切换至最近支持的{temperature}℃"
 
     def test_hex2_encoding_40c(self):
         """40°C → hex2 → "28" (2-char)"""
@@ -416,6 +419,31 @@ class TestEntityPlatforms:
             assert key in sensors
         assert sensors["fault_code"]["fallback_state_attribute"] == "error_code"
         assert "00" in sensors["fault_code"]["fallback_when"]
+        assert sensors["gas_usage"]["name"] == "总计燃气用量"
+        assert sensors["error_code"]["disabled_by_default"] is True
+
+    @pytest.mark.parametrize("device_type", E32_TYPES)
+    def test_e32_diagnostic_sensor_order(self, device_type):
+        d = load(device_type)
+        sensor_keys = [s["key"] for s in d["entities"]["sensor"]]
+
+        assert sensor_keys == [
+            "hot_water_temp",
+            "fault_code",
+            "burning_state",
+            "operation_mode",
+            "child_lock",
+            "faucet_not_close",
+            "hot_water_useable",
+            "hot_water_reservation",
+            "gas_usage",
+            "monthly_gas_consumption",
+            "yearly_gas_consumption",
+            "today_gas_consumption",
+            "yesterday_gas_consumption",
+            "hot_water_burning_times",
+            "error_code",
+        ]
 
     @pytest.mark.parametrize("device_type", E32_TYPES)
     def test_e32_schedule_config_uses_single_mode(self, device_type):

@@ -51,12 +51,12 @@ async def async_setup_entry(
     _LOGGER.debug("Setting up %d sensor entities", len(entities))
     async_add_entities(entities)
 
-    # Sync experimental sensor visibility with the option.
+    # Sync config-driven sensor visibility with the registry.
     # entity_registry_enabled_default only applies to first-time registration;
     # we must explicitly update already-registered entries.
     ent_reg = er.async_get(hass)
     for entity in entities:
-        if not isinstance(entity, RinnaiGenericSensor) or not entity.experimental:
+        if not isinstance(entity, RinnaiGenericSensor):
             continue
         entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, entity.unique_id)
         if not entity_id:
@@ -64,11 +64,21 @@ async def async_setup_entry(
         reg_entry = ent_reg.async_get(entity_id)
         if not reg_entry:
             continue
-        if not experimental_enabled and reg_entry.disabled_by is None:
+
+        should_disable = entity.disabled_by_default or (
+            entity.experimental and not experimental_enabled
+        )
+        should_enable = (
+            entity.experimental
+            and experimental_enabled
+            and not entity.disabled_by_default
+        )
+
+        if should_disable and reg_entry.disabled_by is None:
             ent_reg.async_update_entity(
                 entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
             )
-        elif experimental_enabled and reg_entry.disabled_by == er.RegistryEntryDisabler.INTEGRATION:
+        elif should_enable and reg_entry.disabled_by == er.RegistryEntryDisabler.INTEGRATION:
             ent_reg.async_update_entity(entity_id, disabled_by=None)
 
 
@@ -86,7 +96,8 @@ class RinnaiGenericSensor(RinnaiEntity, SensorEntity, RestoreEntity):
         super().__init__(coordinator, device_id, config)
 
         self.experimental: bool = config.get("experimental", False)
-        if self.experimental and not experimental_enabled:
+        self.disabled_by_default: bool = config.get("disabled_by_default", False)
+        if self.disabled_by_default or (self.experimental and not experimental_enabled):
             self._attr_entity_registry_enabled_default = False
 
         description = SensorEntityDescription(

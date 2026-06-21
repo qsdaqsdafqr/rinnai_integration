@@ -75,7 +75,7 @@
     "entities": {
         "water_heater": [
             {
-                "name": "热水器",
+                "name": "设定温度",
                 "key": "main",
                 "min_temp": 35,
                 "max_temp": 60,
@@ -83,12 +83,15 @@
                 "state_attribute": "hot_water_temp",
                 "operation_mode": "热水",
                 "changing_operation_template": "正在更改至{temperature}℃",
+                "temperature_notice_attribute": "温度提示",
                 "relative_temperature_control": {
                     "command_key": "hotWaterTempOperate",
                     "increase": "01",
                     "decrease": "00",
                     "step_delay_seconds": 2,
                     "refresh_retries": 3,
+                    "adjust_unsupported_temperature": true,
+                    "unsupported_temperature_template": "不支持{requested}℃，已切换至最近支持的{temperature}℃",
                     "mode_attribute": "operation_mode",
                     "allowed_temps_by_mode": {
                         "E0": [
@@ -172,18 +175,18 @@
                 "state_attribute": "hot_water_temp"
             },
             {
-                "key": "operation_mode",
-                "name": "运行模式",
+                "key": "fault_code",
+                "name": "故障码",
                 "entity_category": "diagnostic",
-                "state_attribute": "operation_mode",
-                "value_map": {
-                    "E0": "普通",
-                    "A0": "普通",
-                    "C1": "厨房",
-                    "81": "厨房",
-                    "90": "淋浴",
-                    "20": "关机"
-                }
+                "state_attribute": "fault_code",
+                "fallback_state_attribute": "error_code",
+                "fallback_when": [
+                    "",
+                    "0",
+                    "00",
+                    "Error",
+                    "error"
+                ]
             },
             {
                 "key": "burning_state",
@@ -200,43 +203,18 @@
                 }
             },
             {
-                "key": "gas_usage",
-                "name": "当前燃气用量",
-                "device_class": "gas",
-                "state_class": "total_increasing",
-                "unit_of_measurement": "m³",
+                "key": "operation_mode",
+                "name": "运行模式",
                 "entity_category": "diagnostic",
-                "state_attribute": "gas_usage",
-                "experimental": true
-            },
-            {
-                "key": "hot_water_burning_times",
-                "name": "热水点火次数",
-                "state_class": "total_increasing",
-                "unit_of_measurement": "次",
-                "entity_category": "diagnostic",
-                "state_attribute": "hot_water_burning_times",
-                "experimental": true
-            },
-            {
-                "key": "fault_code",
-                "name": "故障码",
-                "entity_category": "diagnostic",
-                "state_attribute": "fault_code",
-                "fallback_state_attribute": "error_code",
-                "fallback_when": [
-                    "",
-                    "0",
-                    "00",
-                    "Error",
-                    "error"
-                ]
-            },
-            {
-                "key": "error_code",
-                "name": "备用故障码",
-                "entity_category": "diagnostic",
-                "state_attribute": "error_code"
+                "state_attribute": "operation_mode",
+                "value_map": {
+                    "E0": "普通",
+                    "A0": "普通",
+                    "C1": "厨房",
+                    "81": "厨房",
+                    "90": "淋浴",
+                    "20": "关机"
+                }
             },
             {
                 "key": "child_lock",
@@ -282,6 +260,16 @@
                 }
             },
             {
+                "key": "gas_usage",
+                "name": "总计燃气用量",
+                "device_class": "gas",
+                "state_class": "total_increasing",
+                "unit_of_measurement": "m³",
+                "entity_category": "diagnostic",
+                "state_attribute": "gas_usage",
+                "experimental": true
+            },
+            {
                 "key": "monthly_gas_consumption",
                 "name": "本月燃气用量",
                 "device_class": "gas",
@@ -316,6 +304,22 @@
                 "unit_of_measurement": "m³",
                 "entity_category": "diagnostic",
                 "state_attribute": "yesterday_gas_consumption"
+            },
+            {
+                "key": "hot_water_burning_times",
+                "name": "热水点火次数",
+                "state_class": "total_increasing",
+                "unit_of_measurement": "次",
+                "entity_category": "diagnostic",
+                "state_attribute": "hot_water_burning_times",
+                "experimental": true
+            },
+            {
+                "key": "error_code",
+                "name": "备用故障码",
+                "entity_category": "diagnostic",
+                "state_attribute": "error_code",
+                "disabled_by_default": true
             }
         ],
         "switch": [

@@ -423,6 +423,7 @@ async def test_relative_temperature_rejects_disallowed_mode_value(
     entity_modules: SimpleNamespace,
 ) -> None:
     config = _e32_water_heater_config()
+    config["relative_temperature_control"]["adjust_unsupported_temperature"] = False
     coordinator = StubCoordinator(
         {"hotWaterTempSetting": 40, "operationMode": "C1"},
         {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
@@ -433,6 +434,32 @@ async def test_relative_temperature_rejects_disallowed_mode_value(
 
     assert coordinator.commands == []
     assert coordinator.refresh_count == 0
+
+
+@pytest.mark.asyncio
+async def test_relative_temperature_adjusts_disallowed_value_to_nearest(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = _e32_water_heater_config()
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 40, "operationMode": "C1"},
+        {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=45)
+
+    assert coordinator.commands == [
+        {"hotWaterTempOperate": "01"},
+        {"hotWaterTempOperate": "01"},
+    ]
+    assert coordinator.refresh_count == 2
+    assert coordinator.state.raw_data["hotWaterTempSetting"] == 42
+    assert entity._attr_extra_state_attributes == {
+        "温度提示": "不支持45℃，已切换至最近支持的42℃",
+    }
+    assert "正在更改至42℃" in entity._written_operations
+    assert entity._written_operations[-1] == "热水"
 
 
 @pytest.mark.asyncio
@@ -662,3 +689,23 @@ def test_sensor_fallback_uses_error_code_when_fault_code_is_empty(
     entity._update_attributes()
 
     assert entity._attr_native_value == "12"
+
+
+def test_disabled_sensor_is_hidden_by_default(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = next(
+        item for item in _e32_config()["entities"]["sensor"] if item["key"] == "error_code"
+    )
+    coordinator = StubCoordinator(
+        {"errorCode": "12"},
+        {"error_code": "errorCode"},
+    )
+    entity = entity_modules.sensor.RinnaiGenericSensor(
+        coordinator,
+        "dev1",
+        config,
+    )
+
+    assert entity.disabled_by_default is True
+    assert entity._attr_entity_registry_enabled_default is False

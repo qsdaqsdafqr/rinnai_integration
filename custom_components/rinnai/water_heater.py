@@ -70,8 +70,12 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         # Operation mode name from config, default to "Hot Water" if not specified (display only)
         self._operation_mode = config.get("operation_mode", "Hot Water")
         self._changing_operation_template = config.get("changing_operation_template")
+        self._temperature_notice_attribute = config.get(
+            "temperature_notice_attribute", "温度提示"
+        )
         self._attr_operation_list = [self._operation_mode]
         self._attr_current_operation = self._operation_mode
+        self._attr_extra_state_attributes = {}
 
         self._update_attributes()
 
@@ -181,12 +185,25 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
 
         allowed_temps = self._allowed_temperatures_for_current_mode()
         if allowed_temps is not None and temperature not in allowed_temps:
+            if not allowed_temps or not control.get("adjust_unsupported_temperature"):
+                _LOGGER.warning(
+                    "Device %s: temperature %sC is not allowed for current mode",
+                    self._device_id,
+                    temperature,
+                )
+                return
+
+            requested_temperature = temperature
+            temperature = self._nearest_supported_temperature(temperature, allowed_temps)
+            self._set_temperature_notice(requested_temperature, temperature)
             _LOGGER.warning(
-                "Device %s: temperature %sC is not allowed for current mode",
+                "Device %s: temperature %sC is not allowed for current mode; using nearest supported %sC",
                 self._device_id,
+                requested_temperature,
                 temperature,
             )
-            return
+        else:
+            self._clear_temperature_notice()
 
         current = self._current_temperature()
         if current is None:
@@ -254,6 +271,32 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         self._attr_current_operation = operation
         self.async_write_ha_state()
 
+    def _set_temperature_notice(self, requested: int, temperature: int) -> None:
+        """Show that an unsupported target was adjusted to a supported value."""
+        control = self._relative_temperature_control or {}
+        template = control.get(
+            "unsupported_temperature_template",
+            "Unsupported {requested}C; using nearest supported {temperature}C",
+        )
+        notice = template.format(requested=requested, temperature=temperature)
+        self._attr_extra_state_attributes = {
+            self._temperature_notice_attribute: notice,
+        }
+        self._attr_operation_list = [self._operation_mode, notice]
+        self._attr_current_operation = notice
+        self.async_write_ha_state()
+
+    def _clear_temperature_notice(self) -> None:
+        """Clear the last unsupported-temperature notice if present."""
+        if not self._attr_extra_state_attributes:
+            return
+
+        self._attr_extra_state_attributes = {}
+        if self._attr_current_operation != self._operation_mode:
+            self._attr_operation_list = [self._operation_mode]
+            self._attr_current_operation = self._operation_mode
+        self.async_write_ha_state()
+
     def _restore_operation(self) -> None:
         """Restore the configured normal operation label."""
         if self._attr_current_operation == self._operation_mode:
@@ -262,6 +305,17 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         self._attr_operation_list = [self._operation_mode]
         self._attr_current_operation = self._operation_mode
         self.async_write_ha_state()
+
+    @staticmethod
+    def _nearest_supported_temperature(
+        temperature: int,
+        allowed_temps: list[int],
+    ) -> int:
+        """Return the closest allowed target, preferring the warmer value on ties."""
+        return min(
+            allowed_temps,
+            key=lambda allowed: (abs(allowed - temperature), -allowed),
+        )
 
     @staticmethod
     def _relative_refresh_retries(control: dict[str, Any]) -> int:
