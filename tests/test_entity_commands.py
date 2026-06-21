@@ -203,10 +203,12 @@ class StubCoordinator:
         raw_data: dict[str, Any],
         state_mapping: dict[str, str],
         temperature_steps: list[int] | None = None,
+        stale_refreshes: int = 0,
     ) -> None:
         self.commands: list[dict[str, Any]] = []
         self.refresh_count = 0
         self.temperature_steps = temperature_steps
+        self.stale_refreshes = stale_refreshes
         self.state = SimpleNamespace(raw_data=raw_data)
         self.device = SimpleNamespace(
             online=True,
@@ -232,6 +234,9 @@ class StubCoordinator:
 
     async def async_request_refresh(self) -> None:
         self.refresh_count += 1
+        if self.stale_refreshes > 0:
+            self.stale_refreshes -= 1
+            return
         command = self.commands[-1] if self.commands else {}
         if command.get("hotWaterTempOperate") == "01":
             self._step_temperature(1)
@@ -258,7 +263,9 @@ def _e32_config() -> dict[str, Any]:
 
 
 def _e32_water_heater_config() -> dict[str, Any]:
-    return _e32_config()["entities"]["water_heater"][0]
+    config = json.loads(json.dumps(_e32_config()["entities"]["water_heater"][0]))
+    config["relative_temperature_control"]["step_delay_seconds"] = 0
+    return config
 
 
 @pytest.mark.asyncio
@@ -336,6 +343,26 @@ async def test_relative_temperature_uses_allowed_temperature_steps(
     ]
     assert coordinator.refresh_count == 2
     assert coordinator.state.raw_data["hotWaterTempSetting"] == 55
+
+
+@pytest.mark.asyncio
+async def test_relative_temperature_retries_stale_refresh(
+    entity_modules: SimpleNamespace,
+) -> None:
+    config = _e32_water_heater_config()
+    config["relative_temperature_control"]["refresh_retries"] = 2
+    coordinator = StubCoordinator(
+        {"hotWaterTempSetting": 40, "operationMode": "E0"},
+        {"hot_water_temp": "hotWaterTempSetting", "operation_mode": "operationMode"},
+        stale_refreshes=1,
+    )
+    entity = entity_modules.water_heater.RinnaiWaterHeaterEntity(coordinator, "dev1", config)
+
+    await entity.async_set_temperature(temperature=41)
+
+    assert coordinator.commands == [{"hotWaterTempOperate": "01"}]
+    assert coordinator.refresh_count == 2
+    assert coordinator.state.raw_data["hotWaterTempSetting"] == 41
 
 
 @pytest.mark.asyncio

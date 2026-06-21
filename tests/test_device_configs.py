@@ -322,6 +322,9 @@ class TestTemperatureEncoding:
         wh = d["entities"]["water_heater"][0]
         assert wh.get("temp_format", "hex2") != "hex4"
         assert "relative_temperature_control" in wh
+        control = wh["relative_temperature_control"]
+        assert control["step_delay_seconds"] > 0
+        assert control["refresh_retries"] > 1
 
     def test_hex2_encoding_40c(self):
         """40°C → hex2 → "28" (2-char)"""

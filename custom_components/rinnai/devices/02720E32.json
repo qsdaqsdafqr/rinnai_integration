@@ -86,6 +86,8 @@
                     "command_key": "hotWaterTempOperate",
                     "increase": "01",
                     "decrease": "00",
+                    "step_delay_seconds": 2,
+                    "refresh_retries": 3,
                     "mode_attribute": "operation_mode",
                     "allowed_temps_by_mode": {
                         "E0": [

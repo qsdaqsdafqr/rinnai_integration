@@ -1,6 +1,7 @@
 """Support for Rinnai water heater."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -203,6 +204,7 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
                 allowed_temps.index(temperature) - allowed_temps.index(current)
             )
         max_steps = max(max_steps, 1)
+        refresh_retries = self._relative_refresh_retries(control)
 
         for _ in range(max_steps):
             current = self._current_temperature()
@@ -221,8 +223,11 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
                 return
 
             previous = current
-            await self._async_refresh_after_relative_temperature_step()
-            current = self._current_temperature()
+            for _ in range(refresh_retries):
+                await self._async_refresh_after_relative_temperature_step()
+                current = self._current_temperature()
+                if current == temperature or current != previous:
+                    break
             if current == temperature:
                 self._attr_target_temperature = float(temperature)
                 self.async_write_ha_state()
@@ -234,8 +239,24 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
                 )
                 return
 
+    @staticmethod
+    def _relative_refresh_retries(control: dict[str, Any]) -> int:
+        """Return how many times to poll state after a relative step."""
+        try:
+            return max(1, int(control.get("refresh_retries", 1)))
+        except (ValueError, TypeError):
+            return 1
+
     async def _async_refresh_after_relative_temperature_step(self) -> None:
         """Refresh state after a relative temperature command when possible."""
+        control = self._relative_temperature_control or {}
+        try:
+            delay = float(control.get("step_delay_seconds", 0))
+        except (ValueError, TypeError):
+            delay = 0
+        if delay > 0:
+            await asyncio.sleep(delay)
+
         refresh_device_state = getattr(self.coordinator, "async_refresh_device_state", None)
         if refresh_device_state:
             if await refresh_device_state(self._device_id):
