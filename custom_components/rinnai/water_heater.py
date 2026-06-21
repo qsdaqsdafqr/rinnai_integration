@@ -186,9 +186,7 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
             return
 
         operation = self._changing_operation_template.format(temperature=temperature)
-        self._attr_operation_list = [self._operation_mode, operation]
-        self._attr_current_operation = operation
-        self.async_write_ha_state()
+        self._set_current_operation(operation)
 
     def _set_temperature_notice(self, requested: int, temperature: int) -> None:
         """Show that an unsupported target was adjusted to a supported value."""
@@ -201,9 +199,7 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         self._attr_extra_state_attributes = {
             self._temperature_notice_attribute: notice,
         }
-        self._attr_operation_list = [self._operation_mode, notice]
-        self._attr_current_operation = notice
-        self.async_write_ha_state()
+        self._set_current_operation(notice)
 
     def _clear_temperature_notice(self) -> None:
         """Clear the last unsupported-temperature notice if present."""
@@ -212,8 +208,9 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
 
         self._attr_extra_state_attributes = {}
         if self._attr_current_operation != self._operation_mode:
-            self._attr_operation_list = [self._operation_mode]
-            self._attr_current_operation = self._operation_mode
+            self._set_current_operation(self._operation_mode)
+            return
+
         self.async_write_ha_state()
 
     def _restore_operation(self) -> None:
@@ -221,8 +218,14 @@ class RinnaiWaterHeaterEntity(RinnaiEntity, WaterHeaterEntity):
         if self._attr_current_operation == self._operation_mode:
             return
 
+        self._set_current_operation(self._operation_mode)
+
+    def _set_current_operation(self, operation: str) -> None:
+        """Update the operation label shown by Home Assistant."""
         self._attr_operation_list = [self._operation_mode]
-        self._attr_current_operation = self._operation_mode
+        if operation != self._operation_mode:
+            self._attr_operation_list.append(operation)
+        self._attr_current_operation = operation
         self.async_write_ha_state()
 
     async def _async_send_relative_temperature_command(

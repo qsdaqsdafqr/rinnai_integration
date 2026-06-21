@@ -134,16 +134,7 @@ class RinnaiGenericSensor(RinnaiEntity, SensorEntity, RestoreEntity):
         if not self._state_attribute:
             return
 
-        raw_value = self.get_state_value(self._state_attribute)
-        if (
-            self._fallback_state_attribute
-            and str(raw_value) in self._fallback_when
-        ):
-            # Some devices expose an empty primary fault code and place the
-            # actionable code in a secondary field declared by configuration.
-            fallback_value = self.get_state_value(self._fallback_state_attribute)
-            if fallback_value is not None and str(fallback_value) not in self._fallback_when:
-                raw_value = fallback_value
+        raw_value = self._state_value_with_fallback()
         
         if self._value_map and str(raw_value) in self._value_map:
             current_value = self._value_map[str(raw_value)]
@@ -155,6 +146,24 @@ class RinnaiGenericSensor(RinnaiEntity, SensorEntity, RestoreEntity):
              self._attr_native_value = self._restored_native_value
         else:
              self._attr_native_value = current_value
+
+    def _state_value_with_fallback(self) -> Any:
+        """Return the configured state value, applying fallback when needed."""
+        raw_value = self.get_state_value(self._state_attribute)
+        if (
+            not self._fallback_state_attribute
+            or str(raw_value) not in self._fallback_when
+        ):
+            return raw_value
+
+        fallback_value = self.get_state_value(self._fallback_state_attribute)
+        if (
+            fallback_value is not None
+            and str(fallback_value) not in self._fallback_when
+        ):
+            return fallback_value
+
+        return raw_value
 
 
 class RinnaiHeatingReservationSensor(RinnaiEntity, SensorEntity):

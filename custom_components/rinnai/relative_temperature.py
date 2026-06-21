@@ -120,14 +120,9 @@ async def async_set_relative_temperature(
     if current == target_temperature:
         return RelativeTemperatureResult(reached_target=True)
 
-    max_steps = abs(target_temperature - current)
-    if allowed_temps and current in allowed_temps and target_temperature in allowed_temps:
-        # Some devices expose sparse temperature ladders; count configured
-        # ladder positions instead of assuming every degree is selectable.
-        max_steps = abs(
-            allowed_temps.index(target_temperature) - allowed_temps.index(current)
-        )
-    max_steps = max(max_steps, 1)
+    max_steps = _relative_temperature_steps(
+        current, target_temperature, allowed_temps
+    )
     refresh_retries = _refresh_retries(control)
     result = RelativeTemperatureResult()
 
@@ -144,16 +139,16 @@ async def async_set_relative_temperature(
             return result
         result.command_sent = True
 
-        previous = current
+        previous_temperature = current
         for _ in range(refresh_retries):
             await refresh_state()
             current = current_temperature(state_attribute, get_state_value)
-            if current == target_temperature or current != previous:
+            if current == target_temperature or current != previous_temperature:
                 break
         if current == target_temperature:
             result.reached_target = True
             return result
-        if current == previous:
+        if current == previous_temperature:
             _LOGGER.warning(
                 "Device %s: temperature did not change after relative command; stopping",
                 device_id,
@@ -172,6 +167,28 @@ def nearest_supported_temperature(
         allowed_temps,
         key=lambda allowed: (abs(allowed - temperature), -allowed),
     )
+
+
+def _relative_temperature_steps(
+    current_temperature: int,
+    target_temperature: int,
+    allowed_temps: list[int] | None,
+) -> int:
+    """Return how many relative commands may be needed to reach a target."""
+    if (
+        allowed_temps
+        and current_temperature in allowed_temps
+        and target_temperature in allowed_temps
+    ):
+        return max(
+            abs(
+                allowed_temps.index(target_temperature)
+                - allowed_temps.index(current_temperature)
+            ),
+            1,
+        )
+
+    return max(abs(target_temperature - current_temperature), 1)
 
 
 def _allowed_temperatures_for_current_mode(
